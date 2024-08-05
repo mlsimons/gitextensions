@@ -19,7 +19,7 @@ namespace GitCommands
         public IProcess RunDetached(
             CancellationToken cancellationToken,
             ArgumentString arguments = default,
-            bool createWindow = false,
+            bool createWindow = true,
             bool redirectInput = false,
             bool redirectOutput = false,
             Encoding? outputEncoding = null)
@@ -34,7 +34,7 @@ namespace GitCommands
 
         public void RunDetached(
             ArgumentString arguments = default,
-            bool createWindow = false,
+            bool createWindow = true,
             bool redirectInput = false,
             bool redirectOutput = false,
             Encoding? outputEncoding = null)

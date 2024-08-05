@@ -87,6 +87,30 @@ namespace GitUI.CommandsDialogs
             _fullPathResolver = fullPathResolver;
         }
 
+        private string GetCommonPath(List<FileStatusItem> selectedFiles)
+        {
+            if (selectedFiles.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            string firstItemFullName = _fullPathResolver.Resolve(selectedFiles[0].Item.Name);
+            string commonPath = Path.GetDirectoryName(firstItemFullName).EnsureTrailingPathSeparator();
+
+            foreach (FileStatusItem item in selectedFiles)
+            {
+                string selectedItemFullName = _fullPathResolver.Resolve(item.Item.Name);
+                string selectedItemSourceDirectory = Path.GetDirectoryName(selectedItemFullName).EnsureTrailingPathSeparator();
+
+                while (!selectedItemSourceDirectory.StartsWith(commonPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    commonPath = Path.GetDirectoryName(commonPath.TrimEnd(Path.DirectorySeparatorChar)).EnsureTrailingPathSeparator();
+                }
+            }
+
+            return commonPath;
+        }
+
         public void SaveFiles(List<FileStatusItem> files, Func<string, string?> userSelection)
         {
             if (files is null)
@@ -128,6 +152,8 @@ namespace GitUI.CommandsDialogs
 
                 Uri baseSourceDirectoryUri = new(baseSourceDirectory);
 
+                string commonPath = GetCommonPath(selectedFiles);
+
                 foreach (FileStatusItem item in selectedFiles)
                 {
                     string selectedItemFullName = _fullPathResolver.Resolve(item.Item.Name);
@@ -140,14 +166,18 @@ namespace GitUI.CommandsDialogs
                     }
                     else
                     {
-                        Uri selectedItemUri = new(selectedItemSourceDirectory);
-                        targetDirectory = Path.Combine(selectedPath, baseSourceDirectoryUri.MakeRelativeUri(selectedItemUri).OriginalString);
+                        // mstodo removed
+                        // Uri selectedItemUri = new(selectedItemSourceDirectory);
+                        // targetDirectory = Path.Combine(selectedPath, baseSourceDirectoryUri.MakeRelativeUri(selectedItemUri).OriginalString);
+                        targetDirectory = selectedPath;
                     }
 
                     // TODO: check target file exists.
                     // TODO: allow cancel the whole sequence
+                    // remove the common path from selectedItemFullName
+                    string relativePath = selectedItemFullName.Substring(commonPath.Length);
 
-                    string targetFileName = Path.Combine(targetDirectory, Path.GetFileName(selectedItemFullName)).ToNativePath();
+                    string targetFileName = Path.Combine(targetDirectory, relativePath);
                     Debug.WriteLine($"Saving {selectedItemFullName} --> {targetFileName}");
 
                     GetModule().SaveBlobAs(targetFileName, $"{item.SecondRevision.Guid}:\"{item.Item.Name}\"");

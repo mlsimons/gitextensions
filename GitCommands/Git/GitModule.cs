@@ -652,6 +652,13 @@ namespace GitCommands
                 }
             }
 
+            // create directory if it does not exist for saveAs
+            string directory = Path.GetDirectoryName(saveAs);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
             using FileStream stream = File.Create(saveAs);
             stream.Write(blobData, 0, blobData.Length);
         }
