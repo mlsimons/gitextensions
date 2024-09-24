@@ -116,17 +116,31 @@ namespace GitUI.CommandsDialogs.BrowseDialog
         {
             string command = (string)CommandCacheItems.SelectedItem;
 
-            if (GitModule.GitCommandCache.TryGet(command, out byte[]? cmdOut, out byte[]? cmdErr))
+            if (GitModule.GitCommandCache.TryGet(command, out string? cmdOut, out string? cmdErr))
             {
                 Encoding encoding = GitModule.SystemEncoding;
                 commandCacheOutput.Text =
-                    command +
+                    PrintableChars(command) +
                     "\n-------------------------------------\n\n" +
-                    EncodingHelper.DecodeString(cmdOut, cmdErr, ref encoding).Replace("\0", "\\0");
+                    PrintableChars(cmdOut) +
+                    "\n-------------------------------------\n\n" +
+                    PrintableChars(cmdErr);
             }
             else
             {
                 commandCacheOutput.Text = string.Empty;
+            }
+
+            return;
+
+            static string? PrintableChars(string? str)
+            {
+                if (str is null)
+                {
+                    return str;
+                }
+
+                return str.Replace("\0", @"\0").Replace("\r", @"\r").Replace("\n", "\\n\n").Replace("\t", "\u00bb").Replace(" ", "\u00b7").Replace("\u001b", @"\x1b");
             }
         }
 

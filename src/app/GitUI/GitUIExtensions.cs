@@ -71,7 +71,7 @@ namespace GitUI
                 string range = item.BaseA is null || item.BaseB is null
                     ? $"{firstId}...{item.SecondRevision.ObjectId}"
                     : $"{item.BaseA}..{firstId} {item.BaseB}..{item.SecondRevision.ObjectId}";
-                await fileViewer.ViewTextAsync("git-range-diff.sh", $"git range-diff {range} -- {additionalCommandInfo}");
+                await fileViewer.ViewTextAsync(fileName: null, $"git range-diff {range} -- {additionalCommandInfo}");
 
                 ExecutionResult result = await fileViewer.Module.GetRangeDiffAsync(
                         firstId,
@@ -103,7 +103,7 @@ namespace GitUI
 
             if (!string.IsNullOrWhiteSpace(item.Item.GrepString))
             {
-                IGitCommandConfiguration commandConfiguration = GrepHighlightService.GetGitCommandConfiguration();
+                IGitCommandConfiguration commandConfiguration = GrepHighlightService.GetGitCommandConfiguration(fileViewer.Module);
                 ExecutionResult result = await fileViewer.Module.GetGrepFileAsync(
                         item.SecondRevision.ObjectId,
                         item.Item.Name,
@@ -156,13 +156,15 @@ namespace GitUI
             if (!item.Item.IsSubmodule && AppSettings.DiffDisplayAppearance.Value == GitCommands.Settings.DiffDisplayAppearance.Difftastic && fileViewer.IsDifftasticEnabled.Value)
             {
                 bool isTracked = item.Item.IsTracked || (item.Item.TreeGuid is not null && item.SecondRevision.ObjectId is not null);
-                string diffArgs = fileViewer.GetDifftasticArguments();
+                (ArgumentString diffArgs, string extraCacheKey) = fileViewer.GetDifftasticArguments();
 
-                await fileViewer.ViewTextAsync("git-difftool.sh", $"git difftool {diffArgs} -- {item.Item.Name}");
+                // set file name as null to not change the restore lineno
+                await fileViewer.ViewTextAsync(fileName: null, $"git difftool {diffArgs} -- {item.Item.Name}");
 
                 ExecutionResult result = await fileViewer.Module.GetSingleDifftoolAsync(firstId, item.SecondRevision.ObjectId, item.Item.Name, item.Item.OldName,
                     diffArgs,
-                    cacheResult: false,
+                    cacheResult: true,
+                    extraCacheKey,
                     isTracked,
                     useGitColoring: true,
                     cancellationToken);
