@@ -13,8 +13,6 @@ namespace GitUI.HelperDialogs
     public partial class FormProcess : FormStatus
     {
         public string Remote { get; set; }
-        public string ProcessString { get; }
-        public string ProcessArguments { get; set; }
         public string? ProcessInput { get; }
         public readonly string WorkingDirectory;
         public HandleOnExit? HandleOnExitCallback { get; set; }
@@ -34,8 +32,11 @@ namespace GitUI.HelperDialogs
                 string wslDistro = AppSettings.WslGitEnabled ? PathUtil.GetWslDistro(workingDirectory) : "";
                 if (!string.IsNullOrEmpty(wslDistro))
                 {
-                    process = AppSettings.WslGitCommand;
-                    arguments = $"-d {wslDistro} {AppSettings.WslGitPath} {arguments}";
+                    process = AppSettings.WslCommand;
+
+                    // In some WSL environments the current working directory is not passed along to the git command without using the `--cd` argument. Adding it to
+                    // the command line is required for these environments. For those that do not need it using the argument is just redundant.
+                    arguments = $"-d {wslDistro} --cd {WorkingDirectory.RemoveTrailingPathSeparator().Quote()} {AppSettings.WslGitCommand} {arguments}";
                 }
             }
 
@@ -187,9 +188,10 @@ namespace GitUI.HelperDialogs
 
         private void DataReceivedCore(object sender, TextEventArgs e)
         {
-            if (e.Text.Contains("%") || e.Text.Contains("remote: Counting objects"))
+            // CarriageReturn has its literal meaning here, i.e. it is not a line end, but terminates transient progress information
+            if (e.Text.EndsWith(Delimiters.CarriageReturn))
             {
-                this.InvokeAndForget(() => SetProgressAsync(e.Text));
+                this.InvokeAndForget(() => SetProgressAsync(e.Text.TrimEnd()));
             }
             else
             {

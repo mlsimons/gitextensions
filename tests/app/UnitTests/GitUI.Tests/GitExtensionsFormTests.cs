@@ -116,7 +116,7 @@ namespace GitUITests
         {
             if (DpiUtil.IsNonStandard)
             {
-                Assert.Inconclusive("The test must be run at 96dpi");
+                ClassicAssert.Inconclusive("The test must be run at 96dpi");
             }
 
             using MockForm form = new(true)
@@ -145,12 +145,12 @@ namespace GitUITests
 
         [TestCase(-1000, 100, /* -1000 + (800 - 300)/2 */ -750, /* 100 + (600-200)/2 */300)]
         [TestCase(0, 0, /* 0 + (800 - 300)/2 */ 250, /* 0 + (600-200)/2 */200)]
-        [TestCase(1000, -400, /* falls off the screen */ 0, /* falls off the screen */ 0)]
+        [TestCase(1000, -500, /* falls off the screen -> first non-empty screen */ -1920, /* falls off the screen */ 0)]
         public void RestorePosition_should_position_window_with_Owner_set_and_CenterParent(int ownerFormTop, int ownerFormLeft, int expectFormTop, int expectedFormLeft)
         {
             if (DpiUtil.IsNonStandard)
             {
-                Assert.Inconclusive("The test must be run at 96dpi");
+                ClassicAssert.Inconclusive("The test must be run at 96dpi");
             }
 
             using Form owner = new()
@@ -165,6 +165,7 @@ namespace GitUITests
             };
             Rectangle[] screens = new[]
             {
+                new Rectangle(0, 0, 0, 0),
                 new Rectangle(-1920, 0, 1920, 1080),
                 new Rectangle(1920, 0, 1920, 1080),
                 new Rectangle(0, 0, 1920, 1080)

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using GitExtensions.Extensibility;
 using GitUI;
 
 namespace GitCommands.Logging
@@ -23,9 +24,9 @@ namespace GitCommands.Logging
             _raiseCommandsChanged = raiseCommandsChanged;
         }
 
-        public void LogProcessEnd(int exitCode) => LogProcessEnd(exitCode, ex: null);
+        public void LogProcessEnd(int exitCode, string? error = null) => LogProcessEnd(exitCode, error, ex: null);
 
-        public void LogProcessEnd(Exception ex) => LogProcessEnd(exitCode: null, ex);
+        public void LogProcessEnd(Exception ex) => LogProcessEnd(exitCode: null, error: null, ex);
 
         public void SetProcessId(int processId)
         {
@@ -44,16 +45,17 @@ namespace GitCommands.Logging
         {
             if (_entry.Duration is null)
             {
-                LogProcessEnd();
+                LogProcessEnd(exitCode: null, error: ".NET object disposed", ex: null);
             }
         }
 
-        private void LogProcessEnd(int? exitCode = null, Exception? ex = null)
+        private void LogProcessEnd(int? exitCode, string? error, Exception? ex)
         {
             try
             {
                 _entry.Duration = _stopwatch.Elapsed;
                 _entry.ExitCode = exitCode;
+                _entry.Error = error;
                 _entry.Exception = ex;
                 _raiseCommandsChanged();
             }
@@ -77,6 +79,7 @@ namespace GitCommands.Logging
         public TimeSpan? Duration { get; internal set; }
         public int? ProcessId { get; set; }
         public int? ExitCode { get; set; }
+        public string? Error { get; set; }
         public Exception? Exception { get; set; }
         public StackTrace? CallStack { get; set; }
 
@@ -89,28 +92,59 @@ namespace GitCommands.Logging
             IsOnMainThread = isOnMainThread;
         }
 
+        // Log display name for the git command when run through WSL.
+        internal const string WslGitLogName = "~git";
+
+        // Log display name for the git command when run natively.
+        internal const string NativeGitLogName = "git";
+
         public string ColumnLine
         {
             get
             {
+                // The git command is handled specially as what we are really interested in is the - non configuration - arguments it was run with.
+                // So when a git command is run the displayed command is stripped from its path and config arguments and regardless of the actual
+                // git executable name the log will display only `NativeGitLogName` alternatively `WslGitLogName` when the git command is run via WSL.
+                // All other commands are displayed as is without any special treatment.
+
+                string wslCmd = AppSettings.WslCommand;
+                string wslGitCmd = AppSettings.WslGitCommand;
+                string gitCmd = AppSettings.GitCommand;
+
                 string duration = Duration is null
                     ? "running"
                     : $"{((TimeSpan)Duration).TotalMilliseconds:0,0} ms";
 
                 string fileName;
                 string arguments;
-                if (FileName.StartsWith("wsl "))
+                if (FileName.StartsWith(wslCmd) && FileName.EndsWith(wslGitCmd))
                 {
-                    fileName = "wsl";
-                    arguments = GitArgumentsWithoutConfigurationRegex().Replace(Arguments, "").TrimEnd();
+                    // WSL git commands set in `GitModule`
+                    // E.g. `FileName` = "wsl <wsl args> git", `Arguments` = "<git args>".
+                    fileName = WslGitLogName;
+                    arguments = GetGitArgumentsWithoutConfiguration(Arguments);
                 }
-                else if (FileName.EndsWith("git.exe"))
+                else if (FileName.Equals(wslCmd) && Arguments.IndexOf($" {wslGitCmd} ") is int gitIndex && gitIndex >= 0)
                 {
-                    fileName = "git";
-                    arguments = GitArgumentsWithoutConfigurationRegex().Replace(Arguments, "").TrimEnd();
+                    // WSL git commands set in `FormProcess`
+                    // E.g. `FileName` = "wsl". `Arguments` = "<wsl args> git <git args>".
+                    //
+                    // When both `GitModule` and `FormProcess` instantiates `CommandLogEntry` with the same type of information
+                    // in `fileName` and `arguments` this if branch and the one above can be merged.
+                    fileName = WslGitLogName;
+                    const int numSpaces = 2;
+                    arguments = GetGitArgumentsWithoutConfiguration(Arguments.Substring(gitIndex + wslGitCmd.Length + numSpaces));
+                }
+                else if (FileName.EndsWith(gitCmd))
+                {
+                    // All natively run git commands
+                    // E.g. `FileName` = "git", `Arguments` = "<git args>".
+                    fileName = NativeGitLogName;
+                    arguments = GetGitArgumentsWithoutConfiguration(Arguments);
                 }
                 else
                 {
+                    // Anything other than git commands
                     fileName = FileName;
                     arguments = Arguments;
                 }
@@ -164,12 +198,16 @@ namespace GitCommands.Logging
                 s.Append("Started at:  ").AppendLine($"{StartedAt:O}");
                 s.Append("UI Thread?:  ").AppendLine($"{IsOnMainThread}");
                 s.Append("Duration:    ").AppendLine(Duration is not null ? $"{Duration.Value.TotalMilliseconds:0.###} ms" : "still running");
-                s.Append("Exit code:   ").AppendLine(ExitCode is not null ? $"{ExitCode}" : Exception is not null ? $"{Exception}" : "unknown");
+                s.Append("Exit code:   ").AppendLine(ExitCode is int exitCode ? ExecutionResult.FormatExitCode(exitCode) : Exception is not null ? $"{Exception}" : "unknown");
+                s.Append("Error:       ").AppendLine(Error is not null ? Error : "not captured");
                 s.Append("Call stack:  ").Append(CallStack is not null ? $"{Environment.NewLine}{CallStack}" : "not captured");
 
                 return s.ToString();
             }
         }
+
+        public static string GetGitArgumentsWithoutConfiguration(string arguments)
+            => GitArgumentsWithoutConfigurationRegex().Replace(arguments, "").TrimEnd();
     }
 
     public static class CommandLog

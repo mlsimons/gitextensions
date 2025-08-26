@@ -1,5 +1,9 @@
+using System.Diagnostics;
 using GitCommands;
+using GitExtensions.Extensibility;
 using GitExtensions.Extensibility.Git;
+using GitExtUtils;
+using GitUI.Models;
 using GitUI.Properties;
 using GitUI.UserControls;
 using Microsoft.WindowsAPICodePack.Taskbar;
@@ -36,6 +40,8 @@ namespace GitUI.HelperDialogs
             pnlOutput.Controls.Add(ConsoleOutput);
             ConsoleOutput.Dock = DockStyle.Fill;
 
+            ShowPassword.Checked = AppSettings.ShowProcessDialogPasswordInput.Value;
+
             if (_useDialogSettings)
             {
                 KeepDialogOpen.Checked = !AppSettings.CloseProcessDialog;
@@ -50,6 +56,9 @@ namespace GitUI.HelperDialogs
 
             InitializeComplete();
         }
+
+        public string? ProcessString { get; protected init; }
+        public string? ProcessArguments { get; set; }
 
         /// <summary>
         /// Clean up any resources being used.
@@ -116,12 +125,14 @@ namespace GitUI.HelperDialogs
 
             form.ProgressBar.Visible = false;
             form.KeepDialogOpen.Visible = false;
+            form.ShowPassword.Visible = false;
+            form.PasswordInput.Visible = false;
             form.Abort.Visible = false;
 
             form.StartPosition = FormStartPosition.CenterParent;
 
             // We know that an operation (whatever it may have been) has failed, so set the error state.
-            form.Done(false);
+            form.Done(isSuccess: false);
 
             form.ShowDialog(owner);
         }
@@ -150,13 +161,39 @@ namespace GitUI.HelperDialogs
         private protected void AppendMessage(string text)
         {
             ConsoleOutput.AppendMessageFreeThreaded(text);
+
+            if (!text.EndsWith(Delimiters.LineFeed))
+            {
+                this.InvokeAndForget(() =>
+                {
+                    if (ShowPassword.CheckState == CheckState.Unchecked)
+                    {
+                        ShowPassword.CheckState = CheckState.Indeterminate;
+                        PasswordInput.Focus();
+                    }
+                });
+            }
         }
 
         private protected void Done(bool isSuccess)
         {
             try
             {
+                _errorOccurred = !isSuccess;
+
+                try
+                {
+                    RunProcessInfo runProcessInfo = new(ProcessString, ProcessArguments, GetOutputString(), DateTime.Now);
+                    UICommands.GetRequiredService<IOutputHistoryRecorder>().RecordHistory(runProcessInfo);
+                }
+                catch (Exception exception)
+                {
+                    Trace.WriteLine(exception);
+                }
+
                 AppendMessage("Done");
+                ShowPassword.Visible = false;
+                PasswordInput.Visible = false;
                 ProgressBar.Visible = false;
                 Ok.Enabled = true;
                 Ok.Focus();
@@ -167,16 +204,15 @@ namespace GitUI.HelperDialogs
                 Bitmap image = isSuccess ? Images.StatusBadgeSuccess : Images.StatusBadgeError;
                 SetIcon(image);
 
-                _errorOccurred = !isSuccess;
-
                 if (isSuccess && (_useDialogSettings && AppSettings.CloseProcessDialog))
                 {
                     Close();
                 }
             }
-            catch (ConEmu.WinForms.GuiMacroExecutor.GuiMacroException)
+            catch (ConEmu.WinForms.GuiMacroExecutor.GuiMacroException guiMacroException)
             {
                 // Do nothing
+                Trace.WriteLine(guiMacroException);
             }
         }
 
@@ -185,9 +221,11 @@ namespace GitUI.HelperDialogs
             SetIcon(Images.StatusBadgeWaiting);
             ConsoleOutput.Reset();
             OutputLog.Clear();
+            ShowPassword.Visible = true;
+            PasswordInput.Visible = ShowPassword.CheckState != CheckState.Unchecked;
             ProgressBar.Visible = true;
             Ok.Enabled = false;
-            ActiveControl = null;
+            ActiveControl = PasswordInput.Visible ? PasswordInput : null;
         }
 
         private void SetIcon(Bitmap image)
@@ -242,7 +280,7 @@ namespace GitUI.HelperDialogs
             {
                 AbortCallback?.Invoke(this);
                 OutputLog.Append(Environment.NewLine + "Aborted");  // TODO: write to display control also, if we pull the function up to this base class
-                Done(false);
+                Done(isSuccess: false);
                 DialogResult = DialogResult.Abort;
             }
             catch
@@ -260,6 +298,17 @@ namespace GitUI.HelperDialogs
             {
                 Close();
             }
+        }
+
+        private void ShowPassword_CheckedChanged(object sender, EventArgs e)
+        {
+            AppSettings.ShowProcessDialogPasswordInput.Value = ShowPassword.CheckState == CheckState.Checked;
+            PasswordInput.Visible = ShowPassword.CheckState != CheckState.Unchecked;
+        }
+
+        private void PasswordInput_PasswordEntered(object sender, TextEventArgs e)
+        {
+            ConsoleOutput.AppendInput($"{e.Text}\n");
         }
 
         private void Ok_Click(object sender, EventArgs e)

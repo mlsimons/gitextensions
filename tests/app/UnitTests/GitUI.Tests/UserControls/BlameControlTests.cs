@@ -92,6 +92,12 @@ namespace GitUITests.UserControls
             _blameControl.Dispose();
         }
 
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            _referenceRepository.Dispose();
+        }
+
         [TestCase(true, true, true, true, "author1 - 3/22/2010 - fileName.txt")]
         [TestCase(true, true, true, false, "3/22/2010 - author1 - fileName.txt")]
         [TestCase(false, true, true, false, "author1 - fileName.txt")]
@@ -116,6 +122,17 @@ namespace GitUITests.UserControls
                 "fileName.txt", true, true, true, false);
 
             line.ToString().Should().StartWith("3/22/2010 - author1");
+        }
+
+        [Test]
+        public void BuildAuthorLine_DoNotPadIfNotNeeded()
+        {
+            StringBuilder line = new();
+
+            _blameControl.GetTestAccessor().BuildAuthorLine(_gitBlameLine, line, 5, CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern,
+                "fileName.txt", true, false, false, false);
+
+            line.ToString().Should().StartWith("author1");
         }
 
         [Test]
@@ -198,7 +215,7 @@ namespace GitUITests.UserControls
             List<GitUI.Editor.GitBlameEntry> blameEntries = sut.CalculateBlameGutterData(blameLines);
 
             // Then
-            blameEntries.Should().HaveCount(1);
+            blameEntries.Should().ContainSingle();
             blameEntries[0].AgeBucketIndex.Should().Be(0);
         }
 
@@ -212,7 +229,7 @@ namespace GitUITests.UserControls
             List<GitUI.Editor.GitBlameEntry> blameEntries = _blameControl.GetTestAccessor().CalculateBlameGutterData(blameLines);
 
             // Then
-            blameEntries.Should().HaveCount(1);
+            blameEntries.Should().ContainSingle();
             blameEntries[0].AgeBucketIndex.Should().Be(3);
         }
 
@@ -282,6 +299,9 @@ namespace GitUITests.UserControls
             GitRevision rev3 = new(ObjectId.Parse(_commit3));
             GitRevision rev2 = new(ObjectId.Parse(_commit2));
 
+            // Avoid InvalidOperationException "The UI Command Source is not available for this control. Are you calling methods before adding it to the parent control?"
+            _blameControl.HideCommitInfo();
+
             await _blameControl.LoadBlameAsync(rev3, null, _fileName1, null, null, null, null);
             _blameControl.GetTestAccessor().BlameFile.CurrentFileLine.Should().Be(1);
 
@@ -312,6 +332,9 @@ namespace GitUITests.UserControls
             GitRevision rev3 = new(ObjectId.Parse(_commit3));
             GitRevision rev2 = new(ObjectId.Parse(_commit2));
 
+            // Avoid InvalidOperationException "The UI Command Source is not available for this control. Are you calling methods before adding it to the parent control?"
+            _blameControl.HideCommitInfo();
+
             await _blameControl.LoadBlameAsync(rev3, null, _fileName1, null, null, null, null);
             _blameControl.GetTestAccessor().BlameFile.CurrentFileLine.Should().Be(1);
 
@@ -341,6 +364,9 @@ namespace GitUITests.UserControls
         {
             GitRevision rev1 = new(ObjectId.Parse(_referenceRepository.CommitHash));
 
+            // Avoid InvalidOperationException "The UI Command Source is not available for this control. Are you calling methods before adding it to the parent control?"
+            _blameControl.HideCommitInfo();
+
             await _blameControl.LoadBlameAsync(rev1, null, _fileName1, null, null, null, null);
             _blameControl.GetTestAccessor().BlameFile.CurrentFileLine.Should().Be(1);
 
@@ -354,6 +380,9 @@ namespace GitUITests.UserControls
         public async Task BlameControlShouldGotoRequestedLineAtStartAndIfReloaded()
         {
             GitRevision rev1 = new(ObjectId.Parse(_referenceRepository.CommitHash));
+
+            // Avoid InvalidOperationException "The UI Command Source is not available for this control. Are you calling methods before adding it to the parent control?"
+            _blameControl.HideCommitInfo();
 
             await _blameControl.LoadBlameAsync(rev1, null, _fileName1, null, null, null, null, initialLine: 4);
             _blameControl.GetTestAccessor().BlameFile.CurrentFileLine.Should().Be(4);

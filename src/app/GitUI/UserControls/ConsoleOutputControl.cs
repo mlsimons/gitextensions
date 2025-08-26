@@ -18,6 +18,8 @@ namespace GitUI.UserControls
 
         public abstract void AppendMessageFreeThreaded(string text);
 
+        public abstract void AppendInput(string text);
+
         /// <summary>
         /// Creates the instance best fitting the current environment.
         /// </summary>
@@ -41,10 +43,7 @@ namespace GitUI.UserControls
 
         protected void FireDataReceived(TextEventArgs args)
         {
-            if (args is null)
-            {
-                throw new ArgumentNullException(nameof(args));
-            }
+            ArgumentNullException.ThrowIfNull(args);
 
             DataReceived?.Invoke(this, args);
         }

@@ -50,7 +50,6 @@ namespace GitUI
         private readonly TranslationString _tag = new("Tag");
         private readonly TranslationString _remote = new("Remote");
         private readonly TranslationString _openWithGitExtensions = new("&Open with Git Extensions");
-        private readonly TranslationString _openInVisualStudio = new("Open in &Visual Studio");
         private readonly TranslationString _contScrollToNextFileOnlyWithAlt = new("Enable automatic continuous scroll (without ALT button)");
         private readonly TranslationString _noRevision = new("No revision");
 
@@ -72,8 +71,9 @@ namespace GitUI
         private readonly TranslationString _open = new("Open");
         private readonly TranslationString _directoryIsNotAValidRepository = new("The selected item is not a valid git repository.");
 
-        private readonly TranslationString _sortBy = new("&Sort by...");
-        private readonly TranslationString _sortOrder = new("&Sort order...");
+        private readonly TranslationString _sortBy = new("&Sort by");
+        private readonly TranslationString _sortGroupBy = new("&Sort and group by");
+        private readonly TranslationString _sortOrder = new("&Sort order");
 
         private readonly TranslationString _diffSelectedWithRememberedFile = new("&Diff with \"{0}\"");
         private readonly TranslationString _diffWithParent = new("Diff with A ");
@@ -154,19 +154,9 @@ To be able to open this repository, you need to either:
 - add a security exception for the repository to make git trust it, or
 - correct the ownership of the repository.");
         private readonly TranslationString _gitDubiousOwnershipTrustRepository = new("Trust this repository");
-        private readonly TranslationString _gitDubiousOwnershipTrustAllRepositories = new("Trust all repositories");
         private readonly TranslationString _gitDubiousOwnershipOpenRepositoryFolder = new("Open repository in Explorer");
         private readonly TranslationString _gitDubiousOwnershipSeeGitCommandOutput = new("See git command output...");
         private readonly TranslationString _gitDubiousOwnershipHideGitCommandOutput = new("Hide git command output...");
-        private readonly TranslationString _gitDubiousOwnershipTrustAllInstruction = new(@"Git-tracked directories are considered unsafe if they are owned by someone other than the current user.
-By default, Git will refuse to even parse a Git config of a repository owned by someone else, let alone
-run its hooks, and this config setting allows users to specify exceptions, e.g. for intentionally shared
-repositories.
-
-If you wish to trust all git repositories on your system even if they are owned by someone else, run the
-following command.
-
-!!! THIS CAN BE DANGEROUS !!!");
 
         private readonly TranslationString _seeErrorMessage = new("See error message...");
         private readonly TranslationString _hideErrorMessage = new("Hide error message...");
@@ -250,7 +240,6 @@ Copy error details to clipboard?");
         public static string Remote => _instance.Value._remote.Text;
         public static string OpenWithGitExtensions => _instance.Value._openWithGitExtensions.Text;
         public static string FilterFileInGrid => _instance.Value._filterFileInGrid.Text;
-        public static string OpenInVisualStudio => _instance.Value._openInVisualStudio.Text;
         public static string ContScrollToNextFileOnlyWithAlt => _instance.Value._contScrollToNextFileOnlyWithAlt.Text;
         public static string NoRevision => _instance.Value._noRevision.Text;
 
@@ -282,6 +271,7 @@ Copy error details to clipboard?");
         public static string DirectoryInvalidRepository => _instance.Value._directoryIsNotAValidRepository.Text;
 
         public static string SortBy => _instance.Value._sortBy.Text;
+        public static string SortGroupBy => _instance.Value._sortGroupBy.Text;
         public static string SortOrder => _instance.Value._sortOrder.Text;
 
         public static string DiffSelectedWithRememberedFile => _instance.Value._diffSelectedWithRememberedFile.Text;
@@ -358,11 +348,9 @@ Copy error details to clipboard?");
         public static string GitDubiousOwnershipHeader => _instance.Value._gitDubiousOwnershipHeader.Text;
         public static string GitDubiousOwnershipText => _instance.Value._gitDubiousOwnershipText.Text;
         public static string GitDubiousOwnershipTrustRepository => _instance.Value._gitDubiousOwnershipTrustRepository.Text;
-        public static string GitDubiousOwnershipTrustAllRepositories => _instance.Value._gitDubiousOwnershipTrustAllRepositories.Text;
         public static string GitDubiousOwnershipOpenRepositoryFolder => _instance.Value._gitDubiousOwnershipOpenRepositoryFolder.Text;
         public static string GitDubiousOwnershipSeeGitCommandOutput => _instance.Value._gitDubiousOwnershipSeeGitCommandOutput.Text;
         public static string GitDubiousOwnershipHideGitCommandOutput => _instance.Value._gitDubiousOwnershipHideGitCommandOutput.Text;
-        public static string GitDubiousOwnershipTrustAllInstruction => _instance.Value._gitDubiousOwnershipTrustAllInstruction.Text;
 
         public static string SeeErrorMessage => _instance.Value._seeErrorMessage.Text;
         public static string HideErrorMessage => _instance.Value._hideErrorMessage.Text;

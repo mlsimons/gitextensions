@@ -33,8 +33,12 @@ namespace GitUI.CommandsDialogs
                     path = path[1..^1];
                 }
 
-                revisionDiff.FallbackFollowedFile = path;
-                fileTree.FallbackFollowedFile = path;
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    RelativePath relativePath = RelativePath.From(path);
+                    revisionDiff.FallbackFollowedFile = relativePath;
+                    fileTree.FallbackFollowedFile = relativePath;
+                }
             };
 
             bool firstTimeInFileHistoryMode = isFileHistoryMode;
@@ -91,6 +95,21 @@ namespace GitUI.CommandsDialogs
 
             RevisionGrid.SelectedId = selectedId;
             RevisionGrid.FirstId = firstId;
+
+            RevisionGrid.SelectInLeftPanel = SelectInLeftPanel;
+
+            return;
+
+            void SelectInLeftPanel(string gitRef)
+            {
+                if (MainSplitContainer.Panel1Collapsed)
+                {
+                    toggleLeftPanel.PerformClick();
+                }
+
+                repoObjectsTree.SelectGitRef(gitRef);
+                repoObjectsTree.Focus();
+            }
         }
     }
 }

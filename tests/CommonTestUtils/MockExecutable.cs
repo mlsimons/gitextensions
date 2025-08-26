@@ -15,6 +15,7 @@ namespace CommonTestUtils
 
         public string Command => "mock-git.exe";
         public string WorkingDir => ".";
+        public string PrefixArguments => "";
 
         public IDisposable StageOutput(string arguments, string output, int? exitCode = 0, string? error = null)
         {
@@ -58,8 +59,8 @@ namespace CommonTestUtils
 
         public void Verify()
         {
-            Assert.IsEmpty(_outputStackByArguments, "All staged output should have been consumed.");
-            Assert.IsEmpty(_commandArgumentsSet, "All staged output should have been consumed.");
+            ClassicAssert.IsEmpty(_outputStackByArguments, "All staged output should have been consumed.");
+            ClassicAssert.IsEmpty(_commandArgumentsSet, "All staged output should have been consumed.");
 
             foreach (MockProcess process in _processes)
             {
@@ -113,7 +114,7 @@ namespace CommonTestUtils
             public MockProcess(string? output, int? exitCode = 0, string? error = null)
             {
                 StandardOutput = new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(output ?? "")));
-                StandardError = new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(error ?? "")));
+                StandardError = error ?? "";
                 StandardInput = new StreamWriter(new MemoryStream());
                 _exitCode = exitCode;
             }
@@ -121,7 +122,7 @@ namespace CommonTestUtils
             public MockProcess()
             {
                 StandardOutput = new StreamReader(new MemoryStream());
-                StandardError = new StreamReader(new MemoryStream());
+                StandardError = "";
                 StandardInput = new StreamWriter(new MemoryStream());
                 _exitCode = 0;
             }
@@ -129,7 +130,7 @@ namespace CommonTestUtils
             private int? _exitCode;
             public StreamWriter StandardInput { get; }
             public StreamReader StandardOutput { get; }
-            public StreamReader StandardError { get; }
+            public string StandardError { get; }
 
             public void Kill(bool entireProcessTree)
             {
@@ -175,15 +176,14 @@ namespace CommonTestUtils
             public void Verify()
             {
                 // all output should have been read
-                Assert.AreEqual(StandardOutput.BaseStream.Length, StandardOutput.BaseStream.Position);
-                Assert.AreEqual(StandardError.BaseStream.Length, StandardError.BaseStream.Position);
+                ClassicAssert.AreEqual(StandardOutput.BaseStream.Length, StandardOutput.BaseStream.Position);
 
                 // Only verify if std input is not closed.
                 // ExecutableExtensions.ExecuteAsync will close std input when writeInput action is specified
                 if (StandardInput.BaseStream is not null && StandardInput.BaseStream.CanRead)
                 {
                     // no input should have been written (yet)
-                    Assert.AreEqual(0, StandardInput.BaseStream.Length);
+                    ClassicAssert.AreEqual(0, StandardInput.BaseStream.Length);
                 }
             }
         }

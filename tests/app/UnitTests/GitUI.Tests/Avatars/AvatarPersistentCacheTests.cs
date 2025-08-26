@@ -47,7 +47,7 @@ namespace GitUITests.Avatars
             fileSystem.Directory.Exists(_avatarImageCachePath).Should().BeFalse();
             _cache = new FileSystemAvatarCache(_inner, fileSystem);
 
-            Assert.AreSame(_img1, await _cache.GetAvatarAsync(_email1, _name1, _size));
+            ClassicAssert.AreSame(_img1, await _cache.GetAvatarAsync(_email1, _name1, _size));
 
             fileSystem.Directory.Exists(_avatarImageCachePath).Should().BeTrue();
         }
@@ -59,7 +59,7 @@ namespace GitUITests.Avatars
             fileSystem.Directory.Exists(_avatarImageCachePath).Should().BeFalse();
             _cache = new FileSystemAvatarCache(_inner, fileSystem);
 
-            Assert.AreSame(_img1, await _cache.GetAvatarAsync(_email1, _name1, _size));
+            ClassicAssert.AreSame(_img1, await _cache.GetAvatarAsync(_email1, _name1, _size));
 
             fileSystem.Directory.Exists(_avatarImageCachePath).Should().BeTrue();
             fileSystem.File.Exists(_email1AvatarPath).Should().BeTrue();
@@ -109,11 +109,11 @@ namespace GitUITests.Avatars
 
             fileSystem.AddFile(Path.Combine(_avatarImageCachePath, "a@a.com.16px.png"), new MockFileData(""));
             fileSystem.AddFile(Path.Combine(_avatarImageCachePath, "b@b.com.16px.png"), new MockFileData(""));
-            fileSystem.AllFiles.Count().Should().Be(2);
+            fileSystem.AllFiles.Should().HaveCount(2);
 
             await _cacheCleaner.ClearCacheAsync();
 
-            fileSystem.AllFiles.Count().Should().Be(0);
+            fileSystem.AllFiles.Should().BeEmpty();
         }
 
         [Test]
@@ -125,7 +125,7 @@ namespace GitUITests.Avatars
                 .Do(x => throw new DivideByZeroException());
 
             Func<Task> act = () => _cacheCleaner.ClearCacheAsync();
-            act.Should().NotThrow();
+            act.Should().NotThrowAsync();
         }
     }
 }

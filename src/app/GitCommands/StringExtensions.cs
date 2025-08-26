@@ -13,6 +13,13 @@ namespace System
         // NOTE ordinal string comparison is the default as most string comparison in GE is against static ASCII output from git.exe
 
         /// <summary>
+        /// Returns <paramref name="str"/> without the mnemonic marker "&amp;".
+        /// </summary>
+        [Pure]
+        public static string RemoveMnemonicMarker(this string? str)
+            => str?.Replace("&", "");
+
+        /// <summary>
         /// Returns <paramref name="str"/> without <paramref name="prefix"/>.
         /// If <paramref name="prefix"/> is not found, <paramref name="str"/> is returned unchanged.
         /// </summary>
@@ -181,10 +188,20 @@ namespace System
         }
 
         /// <summary>
-        /// Quotes this string if it is not null and not empty.
+        ///  Quotes this string if it is neither null nor empty nor quoted.
         /// </summary>
         [Pure]
-        [return: NotNullIfNotNull("s")]
+        [return: NotNullIfNotNull(nameof(s))]
+        public static string? QuoteIfNotQuotedAndNE(this string? s, string quote = "\"")
+        {
+            return string.IsNullOrEmpty(s) || s.StartsWith(quote) ? s : s.Quote(quote);
+        }
+
+        /// <summary>
+        ///  Quotes this string if it is not null and not empty.
+        /// </summary>
+        [Pure]
+        [return: NotNullIfNotNull(nameof(s))]
         public static string? QuoteNE(this string? s)
         {
             return string.IsNullOrEmpty(s) ? s : s.Quote();
@@ -203,10 +220,10 @@ namespace System
         }
 
         /// <summary>
-        /// Adds parentheses if string is not null and not empty.
+        ///  Adds parentheses if string is not null and not empty.
         /// </summary>
         [Pure]
-        [return: NotNullIfNotNull("s")]
+        [return: NotNullIfNotNull(nameof(s))]
         public static string? AddParenthesesNE(this string? s)
         {
             return string.IsNullOrEmpty(s) ? s : "(" + s + ")";
@@ -224,7 +241,7 @@ namespace System
         }
 
         [Pure]
-        [return: NotNullIfNotNull("value")]
+        [return: NotNullIfNotNull(nameof(value))]
         public static string? RemoveLines(this string? value, Func<string, bool> shouldRemoveLine)
         {
             if (string.IsNullOrEmpty(value))
@@ -248,6 +265,21 @@ namespace System
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        ///  Returns the string with quotes removed from start and end (if they existed).
+        /// </summary>
+        [Pure]
+        [return: NotNullIfNotNull(nameof(str))]
+        public static string RemoveQuotes(this string str, char quote = '"')
+        {
+            if (str?.Length is >= 2 && str[0] == quote && str[^1] == quote)
+            {
+                return str[1..^1];
+            }
+
+            return str;
         }
 
         /// <summary>

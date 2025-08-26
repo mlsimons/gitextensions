@@ -1,6 +1,8 @@
 ﻿using GitCommands.Config;
+using GitCommands.Git;
 using GitExtensions.Extensibility;
 using GitExtensions.Extensibility.Configurations;
+using GitExtensions.Extensibility.Settings;
 
 namespace GitCommands.DiffMergeTools
 {
@@ -73,8 +75,8 @@ namespace GitCommands.DiffMergeTools
 
             (string toolKey, string prefix) = GetInfo(toolType);
             fileSettings.SetValue(toolKey, toolName);
-            fileSettings.SetPathValue(string.Concat(prefix, ".", toolName, ".path"), toolPath);
-            fileSettings.SetPathValue(string.Concat(prefix, ".", toolName, ".cmd"), toolCommand);
+            fileSettings.SetValue(string.Concat(prefix, ".", toolName, ".path"), toolPath.ConvertPathToGitSetting());
+            fileSettings.SetValue(string.Concat(prefix, ".", toolName, ".cmd"), toolCommand.ConvertPathToGitSetting());
         }
 
         /// <summary>
@@ -160,7 +162,7 @@ namespace GitCommands.DiffMergeTools
             else
             {
                 // query static settings for defined fullPath to executable
-                string? command = UnquoteString(GetToolSetting(diffTool.Name, DiffMergeToolType.Merge, "path"));
+                string? command = GetToolSetting(diffTool.Name, DiffMergeToolType.Merge, "path")?.RemoveQuotes();
                 if (!string.IsNullOrWhiteSpace(command))
                 {
                     fullPath = command;
@@ -219,22 +221,6 @@ namespace GitCommands.DiffMergeTools
             return string.IsNullOrWhiteSpace(toolName) ?
                 string.Empty :
                 _getFileSettings()?.GetValue(string.Concat(prefix, ".", toolName, ".", settingSuffix));
-        }
-
-        private static string? UnquoteString(string? str)
-        {
-            if (string.IsNullOrEmpty(str))
-            {
-                return str;
-            }
-
-            int length = str.Length;
-            if (length > 1 && str[0] == '\"' && str[length - 1] == '\"')
-            {
-                str = str.Substring(1, length - 2);
-            }
-
-            return str;
         }
 
         internal TestAccessor GetTestAccessor()

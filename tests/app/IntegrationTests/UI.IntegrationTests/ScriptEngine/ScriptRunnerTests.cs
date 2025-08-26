@@ -4,6 +4,7 @@ using CommonTestUtils;
 using FluentAssertions;
 using FluentAssertions.Specialized;
 using GitExtensions.Extensibility.Git;
+using GitExtUtils;
 using GitUI;
 using GitUI.CommandsDialogs;
 using GitUI.NBugReports;
@@ -134,7 +135,7 @@ namespace GitExtensions.UITests.ScriptEngine
 
             ExceptionAssertions<UserExternalOperationException> ex = ((Action)(() => ExecuteRunScript(_exampleScript, _mockForm, _commands))).Should()
                 .Throw<UserExternalOperationException>();
-            ex.And.Context.Should().Be($"Script: '{_exampleScript.Name}'\r\nA valid revision is required to substitute the argument options");
+            ex.And.Context.Should().Be($"Script: '{_exampleScript.GetDisplayName()}'\r\nA valid revision is required to substitute the argument options");
             ex.And.Command.Should().Be(_exampleScript.Command);
             ex.And.Arguments.Should().Be(_exampleScript.Arguments);
             ex.And.WorkingDirectory.Should().Be(_module.WorkingDir);
@@ -150,7 +151,7 @@ namespace GitExtensions.UITests.ScriptEngine
 
             ExceptionAssertions<UserExternalOperationException> ex = ((Action)(() => ExecuteRunScript(_exampleScript, _mockForm, _mockForm.UICommands))).Should()
                 .Throw<UserExternalOperationException>();
-            ex.And.Context.Should().Be($"Script: '{_exampleScript.Name}'\r\n'sHash' option is only supported when invoked from the revision grid");
+            ex.And.Context.Should().Be($"Script: '{_exampleScript.GetDisplayName()}'\r\n'sHash' option is only supported when invoked from the revision grid");
             ex.And.Command.Should().Be(_exampleScript.Command);
             ex.And.Arguments.Should().Be(_exampleScript.Arguments);
             ex.And.WorkingDirectory.Should().Be(_module.WorkingDir);
@@ -169,12 +170,12 @@ namespace GitExtensions.UITests.ScriptEngine
 
                 // check for correct test setup
                 formBrowse.RevisionGridControl.GetTestAccessor().ClearSelection();
-                Assert.AreEqual(0, formBrowse.RevisionGridControl.GetSelectedRevisions().Count);
+                ClassicAssert.AreEqual(0, formBrowse.RevisionGridControl.GetSelectedRevisions().Count);
                 formBrowse.RevisionGridControl.LatestSelectedRevision.Should().BeNull();
 
                 ExceptionAssertions<UserExternalOperationException> ex = ((Action)(() => ExecuteRunScript(_exampleScript, formBrowse, formBrowse.UICommands))).Should()
                         .Throw<UserExternalOperationException>();
-                ex.And.Context.Should().Be($"Script: '{_exampleScript.Name}'\r\nA valid revision is required to substitute the argument options");
+                ex.And.Context.Should().Be($"Script: '{_exampleScript.GetDisplayName()}'\r\nA valid revision is required to substitute the argument options");
                 ex.And.Command.Should().Be(_exampleScript.Command);
                 ex.And.Arguments.Should().Be(_exampleScript.Arguments);
                 ex.And.WorkingDirectory.Should().Be(_referenceRepository.Module.WorkingDir);
@@ -193,7 +194,7 @@ namespace GitExtensions.UITests.ScriptEngine
                 // wait until the revisions are loaded
                 await AsyncTestHelper.JoinPendingOperationsAsync(AsyncTestHelper.UnexpectedTimeout);
 
-                Assert.AreEqual(1, formBrowse.RevisionGridControl.GetSelectedRevisions().Count);
+                ClassicAssert.AreEqual(1, formBrowse.RevisionGridControl.GetSelectedRevisions().Count);
 
                 string errorMessage = null;
                 bool result = ExecuteRunScript(_exampleScript, formBrowse, formBrowse.UICommands);

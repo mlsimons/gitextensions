@@ -28,6 +28,13 @@ namespace GitExtensions
         [STAThread]
         private static void Main()
         {
+            // If you want to suppress the BugReportInvoker when debugging and exit quickly, uncomment the condition:
+            ////if (!Debugger.IsAttached)
+            {
+                AppDomain.CurrentDomain.UnhandledException += (s, e) => BugReportInvoker.Report((Exception)e.ExceptionObject, e.IsTerminating);
+                Application.ThreadException += (s, e) => BugReportInvoker.Report(e.Exception, isTerminating: false);
+            }
+
             if (Environment.OSVersion.Version.Major >= 6)
             {
                 SetProcessDPIAware();
@@ -60,36 +67,12 @@ namespace GitExtensions
             AppSettings.SetDocumentationBaseUrl(AppSettings.ProductVersion);
 
             ThemeModule.Load();
-#if SUPPORT_THEME_HOOKS
-            Application.ApplicationExit += (s, e) => ThemeModule.Unload();
-
-            SystemEvents.UserPreferenceChanged += (s, e) =>
-            {
-                // Whenever a user changes monitor scaling (e.g. 100%->125%) unload and
-                // reload the theme, and repaint all forms
-                if (e.Category == UserPreferenceCategory.Desktop || e.Category == UserPreferenceCategory.VisualStyle)
-                {
-                    ThemeModule.ReloadWin32ThemeData();
-                    foreach (Form form in Application.OpenForms)
-                    {
-                        form.BeginInvoke((MethodInvoker)(() => form.Invalidate()));
-                    }
-                }
-            };
-#endif
 
             HighDpiMouseCursors.Enable();
 
             try
             {
                 DiagnosticsClient.Initialize(ThisAssembly.Git.IsDirty);
-
-                // If you want to suppress the BugReportInvoker when debugging and exit quickly, uncomment the condition:
-                ////if (!Debugger.IsAttached)
-                {
-                    AppDomain.CurrentDomain.UnhandledException += (s, e) => BugReportInvoker.Report((Exception)e.ExceptionObject, e.IsTerminating);
-                    Application.ThreadException += (s, e) => BugReportInvoker.Report(e.Exception, isTerminating: false);
-                }
             }
             catch (TypeInitializationException tie)
             {
@@ -256,7 +239,7 @@ namespace GitExtensions
             {
                 // If no working dir is yet found, try to find one relative to the current working directory.
                 // This allows the `fileeditor` command to discover repository configuration which is
-                // required for core.commentChar support.
+                // required for core.commentchar support.
                 workingDir = GitModule.TryFindGitWorkingDir(Environment.CurrentDirectory);
             }
 

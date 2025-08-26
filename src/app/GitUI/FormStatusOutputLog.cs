@@ -1,4 +1,5 @@
 using System.Text;
+using GitExtensions.Extensibility;
 
 namespace GitUI
 {
@@ -8,11 +9,9 @@ namespace GitUI
 
         public void Append(string text)
         {
-            if (text is null)
-            {
-                throw new ArgumentNullException(nameof(text));
-            }
+            ArgumentNullException.ThrowIfNull(text);
 
+            text = text.Replace(Delimiters.VerticalFeed, Delimiters.LineFeed).ReplaceLineEndings();
             lock (_outputString)
             {
                 _outputString.Append(text);

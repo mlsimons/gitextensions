@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using GitExtensions.Extensibility.Configurations;
 using GitExtensions.Extensibility.Settings;
@@ -11,12 +12,36 @@ namespace GitExtensions.Extensibility.Git;
 /// </summary>
 public interface IGitModule
 {
-    IConfigFileSettings LocalConfigFile { get; }
-
     string AddRemote(string remoteName, string? path);
+
+    /// <summary>
+    ///  Enumerates all configured local git settings.
+    /// </summary>
+    IEnumerable<(string Setting, string Value)> GetAllLocalSettings();
+
     IReadOnlyList<IGitRef> GetRefs(RefsFilter getRef);
     IEnumerable<string> GetSettings(string setting);
-    IEnumerable<INamedGitItem> GetTree(ObjectId? commitId, bool full);
+    IEnumerable<IObjectGitItem> GetTree(ObjectId? commitId, bool full, string fileName = "", CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///  Loads the user-defined colors for the remote branches specific for the current repository.
+    /// </summary>
+    /// <returns>
+    ///  The user-defined colors for the remote branches specific for the current repository.
+    /// </returns>
+    FrozenDictionary<string, Color> GetRemoteColors();
+
+    /// <summary>
+    /// Resets the colors of the remote to their default values.
+    /// </summary>
+    void ResetRemoteColors();
+
+    /// <summary>
+    ///  Removes the passed git config (sub)section.
+    /// </summary>
+    /// <param name="section">The name of the section.</param>
+    /// <param name="subsection">The optional name of the subsection.</param>
+    void RemoveConfigSection(string section, string? subsection = null);
 
     /// <summary>
     /// Removes the registered remote by running <c>git remote rm</c> command.
@@ -38,12 +63,10 @@ public interface IGitModule
     /// <returns>An ObjectID representing that git reference</returns>
     ObjectId? RevParse(string revisionExpression);
 
-    void SetSetting(string setting, string value);
+    void SetSetting(string setting, string value, bool append = false);
     void UnsetSetting(string setting);
 
     Encoding CommitEncoding { get; }
-
-    IConfigFileSettings EffectiveConfigFile { get; }
 
     Encoding FilesEncoding { get; }
 
@@ -100,6 +123,11 @@ public interface IGitModule
     /// </summary>
     /// <param name="relativePath">A path relative to the .git directory</param>
     string ResolveGitInternalPath(string relativePath);
+
+    /// <summary>
+    ///  Invalidates the cached git config settings in order to trigger a reload on next access or in the background.
+    /// </summary>
+    void InvalidateGitSettings();
 
     /// <summary>Indicates whether the specified directory contains a git repository.</summary>
     bool IsValidGitWorkingDir();
@@ -159,20 +187,12 @@ public interface IGitModule
 
     Task<IReadOnlyList<Remote>> GetRemotesAsync();
 
+    /// <summary>
+    /// [Obsolete($"Use {nameof(GetEffectiveSetting)} instead")]
+    /// </summary>
     string GetSetting(string setting);
 
-    /// <summary>
-    ///  Gets the config setting from git converted in an expected C# value type (bool, int, etc.).
-    /// </summary>
-    /// <typeparam name="T">The expected type of the git setting.</typeparam>
-    /// <param name="setting">The git setting key.</param>
-    /// <returns>The value converted to the <typeparamref name="T" /> type; <see langword="null"/> if the settings is not set.</returns>
-    /// <exception cref="GitConfigFormatException">
-    ///  The value of the git setting <paramref name="setting" /> cannot be converted in the specified type <typeparamref name="T" />.
-    /// </exception>
-    T? GetSetting<T>(string setting) where T : struct;
-
-    string GetEffectiveSetting(string setting);
+    string GetEffectiveSetting(string setting, string defaultValue = "");
 
     /// <summary>
     ///  Gets the config setting from git converted in an expected C# value type (bool, int, etc.).
@@ -184,25 +204,6 @@ public interface IGitModule
     ///  The value of the git setting <paramref name="setting" /> cannot be converted in the specified type <typeparamref name="T" />.
     /// </exception>
     T? GetEffectiveSetting<T>(string setting) where T : struct;
-
-    /// <summary>
-    /// Get the config setting from git according to the scope.
-    /// </summary>
-    /// <param name="setting">The setting key.</param>
-    /// <param name="scopeArg">The scope for the config like "--global" according to https://git-scm.com/docs/git-config#_description. An empty string is the effective settings.</param>
-    /// <param name="cache"><see langword="true"/> if the result shall be cached.</param>
-    /// <returns>The value of the setting or <see langword="null"/> if the value is not set.</returns>
-    string? GetGitSetting(string setting, string scopeArg, bool cache = false);
-
-    /// <summary>
-    /// Get the effective config setting from git.
-    /// </summary>
-    /// <param name="setting">The setting key.</param>
-    /// <param name="cache"><see langword="true"/> if the result shall be cached.</param>
-    /// <returns>The value of the setting or <see langword="null"/> if the value is not set.</returns>
-    string? GetEffectiveGitSetting(string setting, bool cache = false);
-
-    SettingsSource GetEffectiveSettingsByPath(string path);
 
     /// <summary>
     /// Gets the name of the currently checked out branch.
@@ -229,7 +230,8 @@ public interface IGitModule
 
     (int TotalCount, Dictionary<string, int> CountByName) GetCommitsByContributor(DateTime? since = null, DateTime? until = null);
 
-    void SaveBlobAs(string saveAs, string blob);
+    void SaveBlobAs(string saveAs, string blob, CancellationToken cancellationToken = default);
+    Task SaveBlobAsAsync(string saveAs, string blob, CancellationToken cancellationToken = default);
     Task<(char Code, ObjectId CommitId)> GetSuperprojectCurrentCheckoutAsync();
     Task<Patch?> GetCurrentChangesAsync(string? fileName, string? oldFileName, bool staged, string extraDiffArguments, Encoding? encoding = null, bool noLocks = false);
     Task<string?> GetFileContentsAsync(GitItemStatus file);
@@ -330,7 +332,7 @@ public interface IGitModule
     ObjectId? GetMergeBase(ObjectId a, ObjectId b);
     (int? First, int? Second) GetCommitRangeDiffCount(ObjectId firstId, ObjectId secondId);
     IReadOnlyList<GitItemStatus> GetCombinedDiffFileList(ObjectId mergeCommitObjectId);
-    IReadOnlyList<GitItemStatus> GetTreeFiles(ObjectId treeGuid, bool full);
+    IReadOnlyList<GitItemStatus> GetTreeFiles(ObjectId treeGuid, bool full, CancellationToken cancellationToken = default);
     IReadOnlyList<string> GetFullTree(string id);
 
     /// <summary>
@@ -430,13 +432,13 @@ public interface IGitModule
     string FormatPatch(string from, string to, string output, int? start = null);
 
     // TODO: convert to IGitCommand
-    ArgumentString PullCmd(string source, string curRemoteBranch, bool checked1, bool? v, bool checked2);
+    ArgumentString PullCmd(string remote, string? remoteBranch, bool rebase, bool? fetchTags = false, bool isUnshallow = false);
 
     bool ExistsMergeCommit(string? startRev, string? endRev);
 
-    string GetFileText(ObjectId id, Encoding encoding);
+    string? GetFileText(ObjectId id, Encoding encoding, bool stripAnsiEscapeCodes);
 
-    MemoryStream? GetFileStream(string blob);
+    Task<MemoryStream?> GetFileStreamAsync(string blob, CancellationToken cancellationToken);
 
     IReadOnlyList<GitItemStatus> GitStatus(UntrackedFilesMode untrackedFilesMode, IgnoreSubmodulesMode ignoreSubmodulesMode = IgnoreSubmodulesMode.None);
 
@@ -501,14 +503,14 @@ public interface IGitModule
     /// </returns>
     string GetRemoteBranch(string branch);
 
-    string RenameBranch(string name, string newName);
-    IReadOnlyList<GitItemStatus> GetGrepFilesStatus(ObjectId objectId, string grepString, CancellationToken cancellationToken);
+    IReadOnlyList<GitItemStatus> GetGrepFilesStatus(ObjectId objectId, string grepString, bool applyAppSettings, CancellationToken cancellationToken);
     Task<ExecutionResult> GetGrepFileAsync(
         ObjectId objectId,
         string fileName,
         ArgumentString extraArgs,
         string grepString,
         bool useGitColoring,
+        bool showFunctionName,
         IGitCommandConfiguration commandConfiguration,
         CancellationToken cancellationToken);
 

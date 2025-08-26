@@ -121,7 +121,7 @@ namespace GitUI.CommandsDialogs
                 // refresh registered git remotes
                 UserGitRemotes = _remotesManager.LoadRemotes(false).ToList();
 
-                _NO_TRANSLATE_Branch.Text = IsDetachedHead(_currentBranchName) ? HeadText : _currentBranchName;
+                _NO_TRANSLATE_Branch.Text = DetachedHeadParser.IsDetachedHead(_currentBranchName) ? HeadText : _currentBranchName;
 
                 BindRemotesDropDown(null);
 
@@ -143,8 +143,6 @@ namespace GitUI.CommandsDialogs
                 BranchGrid.ColumnHeaderMouseClick += BranchGrid_ColumnHeaderMouseClick;
             }
         }
-
-        private bool IsDetachedHead(string branchName) => branchName.IndexOfAny(['(', ' ', ')']) != -1;
 
         /// <summary>
         /// Gets the list of remotes configured in .git/config file.
@@ -342,7 +340,7 @@ namespace GitUI.CommandsDialogs
                     GitRef? selectedLocalBranch = (_NO_TRANSLATE_Branch.SelectedItem ?? _gitRefs.FirstOrDefault(b => b.IsHead && b.Name == _NO_TRANSLATE_Branch.Text)) as GitRef;
                     track = selectedLocalBranch is not null && string.IsNullOrEmpty(selectedLocalBranch.TrackingRemote) &&
                             !UserGitRemotes.Any(x => _NO_TRANSLATE_Branch.Text.StartsWith(x.Name, StringComparison.OrdinalIgnoreCase));
-                    string autoSetupMerge = Module.EffectiveConfigFile.GetValue("branch.autoSetupMerge");
+                    string autoSetupMerge = Module.GetEffectiveSetting("branch.autosetupmerge");
                     if (!string.IsNullOrWhiteSpace(autoSetupMerge) && autoSetupMerge.ToLowerInvariant() == "false")
                     {
                         track = false;
@@ -752,7 +750,7 @@ namespace GitUI.CommandsDialogs
         {
             RemoteBranch.Items.Clear();
 
-            if (!string.IsNullOrEmpty(_NO_TRANSLATE_Branch.Text) && !IsDetachedHead(_NO_TRANSLATE_Branch.Text) && _NO_TRANSLATE_Branch.Text != HeadText)
+            if (!string.IsNullOrEmpty(_NO_TRANSLATE_Branch.Text) && !DetachedHeadParser.IsDetachedHead(_NO_TRANSLATE_Branch.Text) && _NO_TRANSLATE_Branch.Text != HeadText)
             {
                 RemoteBranch.Items.Add(_NO_TRANSLATE_Branch.Text);
             }
@@ -780,24 +778,30 @@ namespace GitUI.CommandsDialogs
             {
                 if (PushToRemote.Checked)
                 {
-                    if (_NO_TRANSLATE_Branch.SelectedItem is GitRef branch)
+                    // Handle case where current branch is selected but SelectedItem is still null
+                    // because refs are lazy loaded until user interact with the control
+                    // (to improve performance on repos with a lot of local branches)
+                    IGitRef selectedBranchRef = _NO_TRANSLATE_Branch.SelectedItem as IGitRef;
+                    if (selectedBranchRef is null && !string.IsNullOrEmpty(_NO_TRANSLATE_Branch.Text))
                     {
-                        if (_selectedRemote is not null)
-                        {
-                            string? defaultRemote = _remotesManager.GetDefaultPushRemote(_selectedRemote, branch.Name);
-                            if (!string.IsNullOrEmpty(defaultRemote))
-                            {
-                                RemoteBranch.Text = defaultRemote;
-                                return;
-                            }
+                        selectedBranchRef = _gitRefs.FirstOrDefault(r => r.Name == _NO_TRANSLATE_Branch.Text);
+                    }
 
-                            if (branch.TrackingRemote.Equals(_selectedRemote.Name, StringComparison.OrdinalIgnoreCase))
+                    if (selectedBranchRef is not null && _selectedRemote is not null)
+                    {
+                        string? defaultRemote = _remotesManager.GetDefaultPushRemote(_selectedRemote, selectedBranchRef.Name);
+                        if (!string.IsNullOrEmpty(defaultRemote))
+                        {
+                            RemoteBranch.Text = defaultRemote;
+                            return;
+                        }
+
+                        if (selectedBranchRef.TrackingRemote.Equals(_selectedRemote.Name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            RemoteBranch.Text = selectedBranchRef.MergeWith;
+                            if (!string.IsNullOrEmpty(RemoteBranch.Text))
                             {
-                                RemoteBranch.Text = branch.MergeWith;
-                                if (!string.IsNullOrEmpty(RemoteBranch.Text))
-                                {
-                                    return;
-                                }
+                                return;
                             }
                         }
                     }

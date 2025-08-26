@@ -1,5 +1,6 @@
-﻿using GitUI.Hotkey;
-using GitUIPluginInterfaces;
+﻿using GitExtUtils;
+using GitExtUtils.GitUI.Theming;
+using GitUI.Hotkey;
 using ResourceManager.Hotkey;
 
 namespace GitUI.CommandsDialogs.SettingsDialog.Pages
@@ -37,7 +38,7 @@ namespace GitUI.CommandsDialogs.SettingsDialog.Pages
                 if (_keyData != Keys.None)
                 {
                     // TODO: do not change text color on already assigned keys, which occur only once
-                    ForeColor = HotkeySettingsManager.IsUniqueKey(_keyData) ? Color.Red : SystemColors.WindowText;
+                    ForeColor = HotkeySettingsManager.IsUniqueKey(_keyData) ? Color.Red.AdaptTextColor() : SystemColors.WindowText;
                 }
 
                 Text = _keyData.ToText();

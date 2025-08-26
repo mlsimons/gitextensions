@@ -14,6 +14,10 @@ namespace GitUI.NBugReports
 {
     public static class BugReportInvoker
     {
+        public const string DubiousOwnershipSecurityConfigString = "config --global --add safe.directory";
+
+        private static bool _isReportingDubiousOwnershipSecurity;
+
         private static Form? OwnerForm
             => Form.ActiveForm ?? (Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null);
 
@@ -56,7 +60,10 @@ namespace GitUI.NBugReports
             if (exception is ExternalOperationException externalOperationException)
             {
                 // Exit code: <n>
-                AppendIfNotEmpty(externalOperationException.ExitCode.ToString(), TranslatedStrings.ExitCode);
+                if (externalOperationException.ExitCode is int exitCode)
+                {
+                    AppendIfNotEmpty(ExecutionResult.FormatExitCode(exitCode), TranslatedStrings.ExitCode);
+                }
 
                 // Command: <command>
                 AppendIfNotEmpty(externalOperationException.Command, TranslatedStrings.Command);
@@ -126,9 +133,9 @@ namespace GitUI.NBugReports
 
             ExternalOperationException externalOperationException = exception as ExternalOperationException;
 
-            if (externalOperationException?.InnerException?.Message?.Contains(ExecutableExtensions.DubiousOwnershipSecurityConfigString) is true)
+            if (externalOperationException?.InnerException?.Message?.Contains(DubiousOwnershipSecurityConfigString) is true)
             {
-                ReportDubiousOwnership(externalOperationException.InnerException);
+                ReportDubiousOwnership(externalOperationException);
                 return;
             }
 
@@ -156,7 +163,7 @@ namespace GitUI.NBugReports
 
             // Treat all git errors as user issues
             if (string.Equals(AppSettings.GitCommand, externalOperationException?.Command, StringComparison.InvariantCultureIgnoreCase)
-             || string.Equals(AppSettings.WslGitCommand, externalOperationException?.Command, StringComparison.InvariantCultureIgnoreCase))
+             || string.Equals(AppSettings.WslCommand, externalOperationException?.Command, StringComparison.InvariantCultureIgnoreCase))
             {
                 isUserExternalOperation = true;
             }
@@ -263,9 +270,28 @@ namespace GitUI.NBugReports
             }
         }
 
-        private static void ReportDubiousOwnership(Exception exception)
+        private static void ReportDubiousOwnership(ExternalOperationException exception)
         {
-            string error = exception.Message;
+            if (_isReportingDubiousOwnershipSecurity)
+            {
+                return;
+            }
+
+            try
+            {
+                _isReportingDubiousOwnershipSecurity = true;
+                ReportDubiousOwnershipImpl(exception);
+            }
+            finally
+            {
+                _isReportingDubiousOwnershipSecurity = false;
+            }
+        }
+
+        private static void ReportDubiousOwnershipImpl(ExternalOperationException exception)
+        {
+            ArgumentNullException.ThrowIfNull(exception.InnerException);
+            string error = exception.InnerException.Message;
             TaskDialogPage pageSecurity = new()
             {
                 Icon = TaskDialogIcon.Error,
@@ -275,16 +301,15 @@ namespace GitUI.NBugReports
                 AllowCancel = true,
                 SizeToContent = true,
             };
-            int startIndex = error.IndexOf(ExecutableExtensions.DubiousOwnershipSecurityConfigString);
+            int startIndex = error.IndexOf(DubiousOwnershipSecurityConfigString);
             string gitConfigTrustRepoCommand = ReplaceRepoPathQuotes(error[startIndex..].Trim());
-            string folderPath = error[(startIndex + ExecutableExtensions.DubiousOwnershipSecurityConfigString.Length + 1)..];
+            string folderPath = exception.WorkingDirectory ?? error[(startIndex + DubiousOwnershipSecurityConfigString.Length + 1)..];
 
             TaskDialogCommandLinkButton openExplorerButton = new(TranslatedStrings.GitDubiousOwnershipOpenRepositoryFolder, allowCloseDialog: false);
             openExplorerButton.Click += (_, _) => OsShellUtil.OpenWithFileExplorer(PathUtil.ToNativePath(folderPath));
             pageSecurity.Buttons.Add(openExplorerButton);
 
-            AddTrustRepoButton(TranslatedStrings.GitDubiousOwnershipTrustRepository, gitConfigTrustRepoCommand);
-            AddTrustAllReposButton(TranslatedStrings.GitDubiousOwnershipTrustAllRepositories);
+            AddTrustRepoButton(TranslatedStrings.GitDubiousOwnershipTrustRepository, gitConfigTrustRepoCommand, exception.WorkingDirectory ?? ".");
 
             TaskDialogButton helpButton = TaskDialogButton.Help;
             helpButton.Click += (_, _) =>
@@ -311,7 +336,7 @@ namespace GitUI.NBugReports
 
             return;
 
-            void AddTrustRepoButton(string buttonText, string command)
+            void AddTrustRepoButton(string buttonText, string command, string workingDir)
             {
                 TaskDialogCommandLinkButton button = new(buttonText)
                 {
@@ -320,37 +345,8 @@ namespace GitUI.NBugReports
 
                 button.Click += (_, _) =>
                 {
-                    new GitModule(".").GitExecutable.Start(command);
-                    ShowGitRepo(OwnerForm, folderPath);
-                };
-
-                pageSecurity.Buttons.Add(button);
-            }
-
-            void AddTrustAllReposButton(string buttonText)
-            {
-                TaskDialogCommandLinkButton button = new(buttonText, allowCloseDialog: false)
-                {
-                    DescriptionText = $"git {ExecutableExtensions.DubiousOwnershipSecurityConfigString} *",
-                };
-
-                button.Click += (_, _) =>
-                {
-                    string tempFile = Path.GetTempFileName();
-                    File.WriteAllText(tempFile, $"{TranslatedStrings.GitDubiousOwnershipTrustAllInstruction}\r\n\r\ngit {ExecutableExtensions.DubiousOwnershipSecurityConfigString} \"*\"");
-
-                    // TODO: if FormEditor ever changed to use the DI, we'll need to configure the container
-                    using FormEditor formEditor = new(new GitUICommands(GitUICommands.EmptyServiceProvider, new GitModule(null)), tempFile, showWarning: false, readOnly: true);
-                    formEditor.ShowDialog();
-
-                    try
-                    {
-                        File.Delete(tempFile);
-                    }
-                    catch
-                    {
-                        // no-op
-                    }
+                    new GitModule(workingDir).GitExecutable.Start(command).WaitForExit();
+                    ShowGitRepo(OwnerForm, workingDir);
                 };
 
                 pageSecurity.Buttons.Add(button);
@@ -371,6 +367,9 @@ namespace GitUI.NBugReports
             // Turns single quotes to double quotes on Windows if there are any at all around the repo path.
             // in : git config --global -add safe.directory '%(prefix)///unc_machine/folder/to/repo'
             // out: git config --global -add safe.directory "%(prefix)///unc_machine/folder/to/repo"
+            // as well as:
+            // in : git config --global -add safe.directory 'd:/folder/to/repo with space in name'
+            // out: git config --global -add safe.directory "d:/folder/to/repo with space in name"
             static string ReplaceRepoPathQuotes(string command)
             {
                 if (!EnvUtils.RunningOnWindows() || !command.EndsWith('\''))
@@ -378,7 +377,7 @@ namespace GitUI.NBugReports
                     return command;
                 }
 
-                int quoteIndex = command.IndexOf("'%(prefix)");
+                int quoteIndex = command.IndexOf('\'');
                 return quoteIndex < 0 ? command : @$"{command[..quoteIndex]}""{command[(quoteIndex + 1)..^1]}""";
             }
         }

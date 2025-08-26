@@ -211,3 +211,11 @@ YYYY/MM/DD, github id, Full name, email
 2024/05/27, redcatH, Yi Liu, i.hao.lin[at}outlook.com
 2024/06/17, astos-marcb, Marc Becker, marc.becker@astos.de
 2024/09/12, ericstj, Eric StJohn, ericstj(at)microsoft.com
+2024/09/26, georg138, Georg Siebke, github(at)georgsiebke.de
+2024/10/21, chkoddi,Chandar,chkoddi@live.com
+2024/11/05, anhtrvn, Anh Tran, anhtran18202(at)gmail.com
+2025/04/19, borzag, Boris Zagar, boris.zagar(at)gmail.com
+2025/05/03, hnalpha323, Muhammad Hamza Noor, hnalpha323(at)gmail.com
+2025/06/03, margaretselzer, Marcell Egyed, spam.myself@yahoo.com
+2025/07/09, KianFitz, Kian Fitzpatrick, kian.fitzpatrick2000(at)gmail.com
+2025/07/30, M-L-Ml, Mihas Malinouski, m.l.malinouski+gitextensions(at)gmail.comgmail.com

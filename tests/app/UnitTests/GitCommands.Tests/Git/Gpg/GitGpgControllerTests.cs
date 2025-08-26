@@ -1,7 +1,7 @@
 ﻿using CommonTestUtils;
 using FluentAssertions;
 using GitCommands;
-using GitCommands.Gpg;
+using GitCommands.Git.Gpg;
 using GitExtensions.Extensibility.Git;
 using GitExtUtils;
 using GitUIPluginInterfaces;
@@ -51,19 +51,19 @@ namespace GitCommandsTests.Git.Gpg
 
             CommitStatus actual = await _gpgController.GetRevisionCommitSignatureStatusAsync(revision);
 
-            Assert.AreEqual(expected, actual);
+            ClassicAssert.AreEqual(expected, actual);
         }
 
         [TestCase]
         public void Validate_GetRevisionCommitSignatureStatusAsync_null_revision()
         {
-            ((Func<Task>)(() => _gpgController.GetRevisionCommitSignatureStatusAsync(null))).Should().Throw<ArgumentNullException>();
+            ((Func<Task>)(() => _gpgController.GetRevisionCommitSignatureStatusAsync(null))).Should().ThrowAsync<ArgumentNullException>();
         }
 
         [TestCase]
         public void Validate_GetRevisionTagSignatureStatusAsync_null_revision()
         {
-            ((Func<Task>)(() => _gpgController.GetRevisionTagSignatureStatusAsync(null))).Should().Throw<ArgumentNullException>();
+            ((Func<Task>)(() => _gpgController.GetRevisionTagSignatureStatusAsync(null))).Should().ThrowAsync<ArgumentNullException>();
         }
 
         [TestCase(TagStatus.NoTag, 0)]
@@ -83,7 +83,7 @@ namespace GitCommandsTests.Git.Gpg
 
             TagStatus actual = await _gpgController.GetRevisionTagSignatureStatusAsync(revision);
 
-            Assert.AreEqual(tagStatus, actual);
+            ClassicAssert.AreEqual(tagStatus, actual);
         }
 
         [TestCase(TagStatus.OneGood, "GOODSIG ... VALIDSIG ...")]
@@ -106,7 +106,7 @@ namespace GitCommandsTests.Git.Gpg
 
             TagStatus actual = await _gpgController.GetRevisionTagSignatureStatusAsync(revision);
 
-            Assert.AreEqual(tagStatus, actual);
+            ClassicAssert.AreEqual(tagStatus, actual);
         }
 
         [TestCase("return string")]
@@ -125,19 +125,19 @@ namespace GitCommandsTests.Git.Gpg
 
             string actual = _gpgController.GetCommitVerificationMessage(revision);
 
-            Assert.AreEqual(returnString, actual);
+            ClassicAssert.AreEqual(returnString, actual);
         }
 
         [TestCase]
         public void Validate_GetCommitVerificationMessage_null_revision()
         {
-            Assert.Throws<ArgumentNullException>(() => _gpgController.GetCommitVerificationMessage(null));
+            ClassicAssert.Throws<ArgumentNullException>(() => _gpgController.GetCommitVerificationMessage(null));
         }
 
         [TestCase]
         public void Validate_GetTagVerifyMessage_null_revision()
         {
-            Assert.Throws<ArgumentNullException>(() => _gpgController.GetTagVerifyMessage(null));
+            ClassicAssert.Throws<ArgumentNullException>(() => _gpgController.GetTagVerifyMessage(null));
         }
 
         [TestCase(0, "")]
@@ -193,7 +193,7 @@ namespace GitCommandsTests.Git.Gpg
 
             string actual = _gpgController.GetTagVerifyMessage(revision);
 
-            Assert.AreEqual(expected, actual);
+            ClassicAssert.AreEqual(expected, actual);
 
             validate?.Dispose();
         }

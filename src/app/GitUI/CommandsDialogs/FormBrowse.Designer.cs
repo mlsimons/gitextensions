@@ -1,7 +1,8 @@
-﻿using System.Drawing;
-using System.Windows.Forms;
+﻿﻿using System.ComponentModel;
 using GitExtensions.Extensibility.Git;
+using GitExtUtils.GitUI.Theming;
 using GitUI.CommandsDialogs.Menus;
+using GitUI.Theming;
 
 namespace GitUI.CommandsDialogs
 {
@@ -59,6 +60,7 @@ namespace GitUI.CommandsDialogs
             userShell = new ToolStripSplitButton();
             EditSettings = new ToolStripButton();
             MainSplitContainer = new SplitContainer();
+            LeftSplitContainer = new SplitContainer();
             repoObjectsTree = new GitUI.LeftPanel.RepoObjectsTree();
             RightSplitContainer = new SplitContainer();
             RevisionsSplitContainer = new SplitContainer();
@@ -70,7 +72,7 @@ namespace GitUI.CommandsDialogs
             CommitInfoTabPage = new TabPage();
             RevisionInfo = new GitUI.CommitInfo.CommitInfo();
             TreeTabPage = new TabPage();
-            fileTree = new GitUI.CommandsDialogs.RevisionFileTreeControl();
+            fileTree = new GitUI.CommandsDialogs.RevisionDiffControl();
             DiffTabPage = new TabPage();
             revisionDiff = new GitUI.CommandsDialogs.RevisionDiffControl();
             GpgInfoTabPage = new TabPage();
@@ -162,6 +164,9 @@ namespace GitUI.CommandsDialogs
             MainSplitContainer.Panel1.SuspendLayout();
             MainSplitContainer.Panel2.SuspendLayout();
             MainSplitContainer.SuspendLayout();
+            ((ISupportInitialize)LeftSplitContainer).BeginInit();
+            LeftSplitContainer.Panel1.SuspendLayout();
+            LeftSplitContainer.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(RightSplitContainer)).BeginInit();
             RightSplitContainer.Panel1.SuspendLayout();
             RightSplitContainer.Panel2.SuspendLayout();
@@ -227,7 +232,6 @@ namespace GitUI.CommandsDialogs
             // 
             RefreshButton.DisplayStyle = ToolStripItemDisplayStyle.Image;
             RefreshButton.Image = Properties.Images.ReloadRevisions;
-            RefreshButton.ImageTransparentColor = Color.White;
             RefreshButton.Name = "RefreshButton";
             RefreshButton.Size = new Size(23, 22);
             RefreshButton.ToolTipText = "Refresh";
@@ -302,7 +306,6 @@ namespace GitUI.CommandsDialogs
             // 
             toolStripButtonLevelUp.DisplayStyle = ToolStripItemDisplayStyle.Image;
             toolStripButtonLevelUp.Image = Properties.Images.SubmodulesManage;
-            toolStripButtonLevelUp.ImageTransparentColor = Color.Magenta;
             toolStripButtonLevelUp.Name = "toolStripButtonLevelUp";
             toolStripButtonLevelUp.Size = new Size(32, 22);
             toolStripButtonLevelUp.ToolTipText = "Submodules";
@@ -317,7 +320,6 @@ namespace GitUI.CommandsDialogs
             // branchSelect
             // 
             branchSelect.Image = Properties.Resources.branch;
-            branchSelect.ImageTransparentColor = Color.Magenta;
             branchSelect.Name = "branchSelect";
             branchSelect.Size = new Size(60, 22);
             branchSelect.Text = "Branch";
@@ -341,7 +343,6 @@ namespace GitUI.CommandsDialogs
             manageStashesToolStripMenuItem,
             createAStashToolStripMenuItem});
             toolStripSplitStash.Image = Properties.Images.Stash;
-            toolStripSplitStash.ImageTransparentColor = Color.Magenta;
             toolStripSplitStash.Name = "toolStripSplitStash";
             toolStripSplitStash.Size = new Size(32, 22);
             toolStripSplitStash.ToolTipText = "Manage stashes";
@@ -395,7 +396,6 @@ namespace GitUI.CommandsDialogs
             // 
             toolStripButtonCommit.Image = Properties.Images.RepoStateClean;
             toolStripButtonCommit.ImageAlign = ContentAlignment.MiddleLeft;
-            toolStripButtonCommit.ImageTransparentColor = Color.Magenta;
             toolStripButtonCommit.Name = "toolStripButtonCommit";
             toolStripButtonCommit.Size = new Size(71, 22);
             toolStripButtonCommit.Text = "Commit";
@@ -416,7 +416,6 @@ namespace GitUI.CommandsDialogs
             toolStripSeparator14,
             setDefaultPullButtonActionToolStripMenuItem});
             toolStripButtonPull.Image = Properties.Images.Pull;
-            toolStripButtonPull.ImageTransparentColor = Color.Magenta;
             toolStripButtonPull.Name = "toolStripButtonPull";
             toolStripButtonPull.Size = new Size(32, 22);
             toolStripButtonPull.Text = "Pull";
@@ -488,7 +487,6 @@ namespace GitUI.CommandsDialogs
             // 
             toolStripButtonPush.DisplayStyle = ToolStripItemDisplayStyle.Image;
             toolStripButtonPush.Image = Properties.Images.Push;
-            toolStripButtonPush.ImageTransparentColor = Color.Magenta;
             toolStripButtonPush.Name = "toolStripButtonPush";
             toolStripButtonPush.Size = new Size(23, 22);
             toolStripButtonPush.Text = "Push";
@@ -503,7 +501,6 @@ namespace GitUI.CommandsDialogs
             // 
             toolStripFileExplorer.Enabled = false;
             toolStripFileExplorer.Image = Properties.Images.BrowseFileExplorer;
-            toolStripFileExplorer.ImageTransparentColor = Color.Gray;
             toolStripFileExplorer.Name = "toolStripFileExplorer";
             toolStripFileExplorer.Size = new Size(23, 22);
             toolStripFileExplorer.ToolTipText = "File Explorer";
@@ -512,7 +509,6 @@ namespace GitUI.CommandsDialogs
             // userShell
             // 
             userShell.Image = Properties.Images.GitForWindows;
-            userShell.ImageTransparentColor = Color.Magenta;
             userShell.Name = "userShell";
             userShell.Size = new Size(23, 22);
             userShell.ToolTipText = "Git bash";
@@ -537,7 +533,7 @@ namespace GitUI.CommandsDialogs
             // 
             // MainSplitContainer.Panel1
             // 
-            MainSplitContainer.Panel1.Controls.Add(repoObjectsTree);
+            MainSplitContainer.Panel1.Controls.Add(LeftSplitContainer);
             MainSplitContainer.Panel1.Padding = new Padding(1);
             MainSplitContainer.Panel1MinSize = 192;
             // 
@@ -548,15 +544,36 @@ namespace GitUI.CommandsDialogs
             MainSplitContainer.SplitterWidth = 6;
             MainSplitContainer.TabIndex = 1;
             // 
+            // LeftSplitContainer
+            // 
+            LeftSplitContainer.BackColor = AppColor.PanelBackground.GetThemeColor();
+            LeftSplitContainer.Dock = DockStyle.Fill;
+            LeftSplitContainer.FixedPanel = FixedPanel.Panel2;
+            LeftSplitContainer.Location = new Point(1, 1);
+            LeftSplitContainer.Margin = new Padding(0);
+            LeftSplitContainer.Name = "LeftSplitContainer";
+            LeftSplitContainer.Orientation = Orientation.Horizontal;
+            // 
+            // LeftSplitContainer.Panel1
+            // 
+            LeftSplitContainer.Panel1.Controls.Add(repoObjectsTree);
+            LeftSplitContainer.Panel2Collapsed = true;
+            LeftSplitContainer.Panel2MinSize = 0;
+            LeftSplitContainer.Size = new Size(190, 480);
+            LeftSplitContainer.SplitterDistance = 388;
+            LeftSplitContainer.SplitterWidth = 7;
+            LeftSplitContainer.TabIndex = 2;
+            LeftSplitContainer.TabStop = false;
+            // 
             // repoObjectsTree
             // 
             repoObjectsTree.Dock = DockStyle.Fill;
             repoObjectsTree.Location = new Point(0, 0);
-            repoObjectsTree.MinimumSize = new Size(190, 0);
             repoObjectsTree.Margin = new Padding(0);
+            repoObjectsTree.MinimumSize = new Size(190, 0);
             repoObjectsTree.Name = "repoObjectsTree";
-            repoObjectsTree.Size = new Size(267, 502);
-            repoObjectsTree.TabIndex = 0;
+            repoObjectsTree.Size = new Size(190, 480);
+            repoObjectsTree.TabIndex = 1;
             // 
             // RightSplitContainer
             // 
@@ -667,7 +684,7 @@ namespace GitUI.CommandsDialogs
             // 
             // RevisionInfo
             // 
-            RevisionInfo.BackColor = SystemColors.Window;
+            RevisionInfo.BackColor = AppColor.PanelBackground.GetThemeColor();
             RevisionInfo.Cursor = Cursors.IBeam;
             RevisionInfo.Dock = DockStyle.Fill;
             RevisionInfo.Location = new Point(0, 0);
@@ -766,7 +783,6 @@ namespace GitUI.CommandsDialogs
             // refreshToolStripMenuItem
             // 
             refreshToolStripMenuItem.Image = Properties.Images.ReloadRevisions;
-            refreshToolStripMenuItem.ImageTransparentColor = Color.Transparent;
             refreshToolStripMenuItem.Name = "refreshToolStripMenuItem";
             refreshToolStripMenuItem.Size = new Size(221, 22);
             refreshToolStripMenuItem.Text = "&Refresh";
@@ -775,7 +791,6 @@ namespace GitUI.CommandsDialogs
             // refreshDashboardToolStripMenuItem
             // 
             refreshDashboardToolStripMenuItem.Image = Properties.Images.ReloadRevisions;
-            refreshDashboardToolStripMenuItem.ImageTransparentColor = Color.Transparent;
             refreshDashboardToolStripMenuItem.Name = "refreshDashboardToolStripMenuItem";
             refreshDashboardToolStripMenuItem.Size = new Size(113, 22);
             refreshDashboardToolStripMenuItem.Text = "&Refresh";
@@ -1401,6 +1416,9 @@ namespace GitUI.CommandsDialogs
             MainSplitContainer.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(MainSplitContainer)).EndInit();
             MainSplitContainer.ResumeLayout(false);
+            LeftSplitContainer.Panel1.ResumeLayout(false);
+            ((ISupportInitialize)LeftSplitContainer).EndInit();
+            LeftSplitContainer.ResumeLayout(false);
             RightSplitContainer.Panel1.ResumeLayout(false);
             RightSplitContainer.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(RightSplitContainer)).EndInit();
@@ -1449,7 +1467,7 @@ namespace GitUI.CommandsDialogs
         private CommitInfo.CommitInfo RevisionInfo;
         private GitUI.LeftPanel.RepoObjectsTree repoObjectsTree;
         private ToolTip FilterToolTip;
-        private RevisionFileTreeControl fileTree;
+        private RevisionDiffControl fileTree;
         private RevisionDiffControl revisionDiff;
         private ToolStripContainer toolPanel;
         private RevisionGpgInfoControl revisionGpgInfo1;
@@ -1567,5 +1585,6 @@ namespace GitUI.CommandsDialogs
         private UserControls.InteractiveGitActionControl notificationBarBisectInProgress;
         private UserControls.InteractiveGitActionControl notificationBarGitActionInProgress;
         private ToolStripMenuItem pluginsLoadingToolStripMenuItem;
+        private SplitContainer LeftSplitContainer;
     }
 }

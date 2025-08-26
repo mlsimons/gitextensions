@@ -190,7 +190,7 @@ namespace GitCommands.Git
             };
         }
 
-        public static ArgumentString Commit(bool amend, bool signOff, string author, bool useExplicitCommitMessage, string? commitMessageFile, Func<string, string?> getPathForGitExecution, bool noVerify = false, bool gpgSign = false, string gpgKeyId = "", bool allowEmpty = false, bool resetAuthor = false)
+        public static ArgumentString Commit(bool amend, bool signOff, string author, bool useExplicitCommitMessage, string? commitMessageFile, Func<string, string?> getPathForGitExecution, bool noVerify = false, bool? gpgSign = null, string gpgKeyId = "", bool allowEmpty = false, bool resetAuthor = false)
         {
             if (useExplicitCommitMessage && string.IsNullOrEmpty(commitMessageFile))
             {
@@ -203,8 +203,9 @@ namespace GitCommands.Git
                 { noVerify, "--no-verify" },
                 { signOff, "--signoff" },
                 { !string.IsNullOrEmpty(author), $"--author=\"{author?.Trim().Trim('"')}\"" },
-                { gpgSign && string.IsNullOrWhiteSpace(gpgKeyId), "-S" },
-                { gpgSign && !string.IsNullOrWhiteSpace(gpgKeyId), $"-S{gpgKeyId}" },
+                { gpgSign is false, "--no-gpg-sign" },
+                { gpgSign is true && string.IsNullOrWhiteSpace(gpgKeyId), "--gpg-sign" },
+                { gpgSign is true && !string.IsNullOrWhiteSpace(gpgKeyId), $"--gpg-sign={gpgKeyId}" },
                 { useExplicitCommitMessage, $"-F {getPathForGitExecution(commitMessageFile).Quote()}" },
                 { allowEmpty, "--allow-empty" },
                 { resetAuthor && amend, "--reset-author" }
@@ -278,6 +279,7 @@ namespace GitCommands.Git
         {
             return new GitArgumentBuilder("diff", gitOptions: noLocks ? (ArgumentString)"--no-optional-locks" : default)
                 {
+                    "--no-ext-diff",
                     "--find-renames",
                     "--find-copies",
                     { AppSettings.UseHistogramDiffAlgorithm, "--histogram" },
@@ -476,14 +478,16 @@ namespace GitCommands.Git
         /// <param name="targetId">The commit to move to.</param>
         /// <param name="repoDir">Directory to the current repo.</param>
         /// <param name="force">Push the reference also if commits are lost.</param>
+        /// <param name="dryRun">Just test whether Git would perform the operation.</param>
         /// <returns>The Git command to execute.</returns>
-        public static ArgumentString PushLocal(string gitRef, ObjectId targetId, string repoDir, Func<string, string?> getPathForGitExecution, bool force = false)
+        public static ArgumentString PushLocal(string gitRef, ObjectId targetId, string repoDir, Func<string, string?> getPathForGitExecution, bool force = false, bool dryRun = false)
         {
             return new GitArgumentBuilder("push")
             {
                 $@"""file://{getPathForGitExecution(repoDir)}""",
                 $"{targetId}:{gitRef}".QuoteNE(),
-                { force, "--force" }
+                { force, "--force" },
+                { dryRun, "--dry-run" }
             };
         }
 
@@ -571,6 +575,16 @@ namespace GitCommands.Git
                 { isRecursive, "-r" },
                 { files.Length == 0, "." },
                 files
+            };
+        }
+
+        public static ArgumentString RenameBranch(string name, string newName)
+        {
+            return new GitArgumentBuilder("branch")
+            {
+                "-m",
+                name.QuoteNE(),
+                newName.QuoteNE()
             };
         }
 
@@ -676,6 +690,22 @@ namespace GitCommands.Git
         public static ArgumentString SubmoduleUpdate(string? name, IEnumerable<GitConfigItem>? configs = null)
         {
             return SubmoduleUpdateCommand((name ?? "").Trim().QuoteNE(), configs);
+        }
+
+        /// <summary>
+        ///  Update a local reference to a new commit.
+        ///  This is similar to "git branch --force "branch" "commit".
+        /// </summary>
+        /// <param name="gitRef">The branch to move.</param>
+        /// <param name="targetId">The commit to move to.</param>
+        /// <returns>The Git command to execute.</returns>
+        public static ArgumentString UpdateRef(string gitRef, ObjectId targetId)
+        {
+            return new GitArgumentBuilder("update-ref")
+            {
+                gitRef.QuoteNE(),
+                targetId
+            };
         }
 
         private static ArgumentString SubmoduleUpdateCommand(string name, IEnumerable<GitConfigItem>? configs)

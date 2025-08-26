@@ -13,7 +13,6 @@ namespace GitUI.Theming
     public class ThemeLoader : IThemeLoader
     {
         private const string ClassSelector = ".";
-        private const string ColorProperty = "color";
 
         private readonly StylesheetParser _parser;
         private readonly IThemeCssUrlResolver _urlResolver;
@@ -124,6 +123,11 @@ namespace GitUI.Theming
         private static Color GetColor(string themeFileName, StyleRule rule)
         {
             string cssColorValue = rule.Style.Color;
+            if (cssColorValue == "" && rule.SelectorText.StartsWith($".{nameof(AppColor.GraphBranch1)[..^1]}"))
+            {
+                return Color.Empty;
+            }
+
             if (string.IsNullOrWhiteSpace(cssColorValue) || !cssColorValue.StartsWith("rgb("))
             {
                 throw StyleRuleThemeException(rule, themeFileName);

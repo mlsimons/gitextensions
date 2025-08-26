@@ -8,14 +8,16 @@ using GitExtensions.Extensibility.Plugins;
 using GitExtUtils;
 using GitExtUtils.GitUI.Theming;
 using GitUI.Avatars;
-using GitUI.CommandDialogs;
+using GitUI.CommandsDialogs;
 using GitUI.Editor;
 using GitUI.HelperDialogs;
 using GitUI.Properties;
+using GitUI.Theming;
 using GitUI.UserControls;
 using GitUIPluginInterfaces;
 using GitUIPluginInterfaces.RepositoryHosts;
 using Microsoft;
+using Microsoft.VisualStudio.Threading;
 using ResourceManager;
 
 namespace GitUI.Blame
@@ -31,27 +33,27 @@ namespace GitUI.Blame
 
         private readonly AsyncLoader _blameLoader = new();
         private int _lineIndex;
-
         private GitBlameLine? _lastBlameLine;
         private GitBlameLine? _clickedBlameLine;
         private GitBlameCommit? _highlightedCommit;
         private GitBlame? _blame;
         private IRevisionGridInfo? _revisionGridInfo;
-        private IRevisionGridUpdate? _revisionGridUpdate;
+        private IRevisionGridFileUpdate? _revisionGridFileUpdate;
         private ObjectId? _blameId;
         private string? _fileName;
         private Encoding? _encoding;
-        private int _lastTooltipX = -100;
-        private int _lastTooltipY = -100;
+        private int _lastTooltipX = int.MinValue;
+        private int _lastTooltipY = int.MinValue;
         private GitBlameCommit? _tooltipCommit;
         private bool _changingScrollPosition;
         private IRepositoryHostPlugin? _gitHoster;
         private static readonly IList<Color> AgeBucketGradientColors = GetAgeBucketGradientColors();
+        private static readonly TranslationString _blameActualPreviousRevision = new("&Blame previous revision");
+        private static readonly TranslationString _blameVisiblePreviousRevision = new("&Blame previous visible revision");
+        private readonly Color _commitHighlightColor;
         private readonly IGitRevisionSummaryBuilder _gitRevisionSummaryBuilder;
         private readonly IGitBlameParser _gitBlameParser;
-
-        // Relative path of the file to blame when blaming a new revision
-        public string? PathToBlame { get; private set; }
+        private bool _loading;
 
         public BlameControl()
         {
@@ -68,6 +70,7 @@ namespace GitUI.Blame
             BlameAuthor.SelectedLineChanged += SelectedLineChanged;
             BlameAuthor.RequestDiffView += ActiveTextAreaControlDoubleClick;
             BlameAuthor.EscapePressed += () => EscapePressed?.Invoke();
+            BlameAuthor.DontMarkGutterSelectedLine();
 
             BlameFile.IsReadOnly = true;
             BlameFile.VScrollPositionChanged += BlameFile_VScrollPositionChanged;
@@ -78,8 +81,16 @@ namespace GitUI.Blame
 
             CommitInfo.CommandClicked += commitInfo_CommandClicked;
 
+            _commitHighlightColor = Application.IsDarkModeEnabled ? AppColor.EditorBackground.GetThemeColor().MakeBackgroundDarkerBy(-0.06) : SystemColors.ControlLight;
             _gitRevisionSummaryBuilder = new GitRevisionSummaryBuilder();
             _gitBlameParser = new GitBlameParser(() => UICommands.Module);
+        }
+
+        public void InitSplitterManager(NestedSplitterManager splitterManager)
+        {
+            NestedSplitterManager nested = new(splitterManager, Name);
+            nested.AddSplitter(splitContainer1, defaultDistance: splitContainer1.Panel1MinSize + 1);
+            nested.AddSplitter(splitContainer2, defaultDistance: splitContainer2.Panel1MinSize + 1);
         }
 
         public void ConfigureRepositoryHostPlugin(IRepositoryHostPlugin? gitHoster)
@@ -102,14 +113,14 @@ namespace GitUI.Blame
             CommitInfo.CommandClicked -= commitInfo_CommandClicked;
         }
 
-        public async Task LoadBlameAsync(GitRevision revision, IReadOnlyList<ObjectId>? children, string fileName, IRevisionGridInfo? revisionGridInfo, IRevisionGridUpdate? revisionGridUpdate, Control? controlToMask, Encoding encoding, int? initialLine = null, bool force = false, CancellationToken cancellationToken = default)
+        public async Task LoadBlameAsync(GitRevision revision, IReadOnlyList<ObjectId>? children, string fileName, IRevisionGridInfo? revisionGridInfo, IRevisionGridFileUpdate? revisionGridFileUpdate, Control? controlToMask, Encoding encoding, int? initialLine = null, bool force = false, CancellationTokenSequence? cancellationTokenSequence = null)
         {
             ObjectId objectId = revision.ObjectId;
 
             // refresh only when something changed
-            if (!force && objectId == _blameId && fileName == _fileName && revisionGridInfo == _revisionGridInfo && _revisionGridUpdate == revisionGridUpdate && encoding == _encoding)
+            if (!force && objectId == _blameId && fileName == _fileName && revisionGridInfo == _revisionGridInfo && _revisionGridFileUpdate == revisionGridFileUpdate && encoding == _encoding)
             {
-                if (initialLine is not null)
+                if (initialLine is not null && !_loading)
                 {
                     BlameFile.GoToLine(initialLine.Value);
                 }
@@ -117,10 +128,12 @@ namespace GitUI.Blame
                 return;
             }
 
-            int line = _clickedBlameLine is not null ? _clickedBlameLine.OriginLineNumber
-                : initialLine ?? (fileName == _fileName ? BlameFile.CurrentFileLine : 1);
+            CancellationToken cancellationToken = cancellationTokenSequence?.Next() ?? default;
+            _loading = true;
+
+            int line = _clickedBlameLine?.OriginLineNumber ?? initialLine ?? (fileName == _fileName ? BlameFile.CurrentFileLine : 1);
             _revisionGridInfo = revisionGridInfo;
-            _revisionGridUpdate = revisionGridUpdate;
+            _revisionGridFileUpdate = revisionGridFileUpdate;
             _fileName = fileName;
             _encoding = encoding;
 
@@ -131,8 +144,19 @@ namespace GitUI.Blame
             await BlameAuthor.ClearAsync();
             await BlameFile.ClearAsync();
 
-            await _blameLoader.LoadAsync(cancellationToken => _blame = Module.Blame(fileName, objectId.ToString(), encoding, lines: null, cancellationToken: cancellationToken),
-                () => ProcessBlame(fileName, revision, children, controlToMask, line, cancellationToken));
+            try
+            {
+                await _blameLoader.LoadAsync(
+                    loaderCancellationToken => _blame = Module.Blame(fileName, objectId.ToString(), encoding, lines: null, cancellationToken: loaderCancellationToken.CombineWith(cancellationToken).Token),
+                    () => ProcessBlame(fileName, revision, children, controlToMask, line, cancellationToken));
+            }
+            catch (ExternalOperationException ex)
+            {
+                _blame = null;
+                await BlameFile.ViewTextAsync(fileName, ex.Message);
+            }
+
+            _loading = false;
         }
 
         private void commitInfo_CommandClicked(object sender, CommandEventArgs e)
@@ -225,8 +249,8 @@ namespace GitUI.Blame
                 {
                     if (prevLine != i - 1 && startLine != -1)
                     {
-                        BlameAuthor.HighlightLines(startLine, prevLine, SystemColors.ControlLight);
-                        BlameFile.HighlightLines(startLine, prevLine, SystemColors.ControlLight);
+                        BlameAuthor.HighlightLines(startLine, prevLine, _commitHighlightColor);
+                        BlameFile.HighlightLines(startLine, prevLine, _commitHighlightColor);
                         startLine = -1;
                     }
 
@@ -454,7 +478,7 @@ namespace GitUI.Blame
                 authorLineBuilder.Append(line.Commit.FileName);
             }
 
-            authorLineBuilder.Append(' ', lineLength - authorLineBuilder.Length).AppendLine();
+            authorLineBuilder.Append(' ', Math.Max(0, lineLength - authorLineBuilder.Length)).AppendLine();
 
             return authorLineBuilder.ToString();
         }
@@ -506,23 +530,10 @@ namespace GitUI.Blame
 
         private void ActiveTextAreaControlDoubleClick(object sender, EventArgs e)
         {
-            if (_lastBlameLine is null)
+            if (_lastBlameLine is not null
+                && TryGetRevision(_lastBlameLine.Commit, out (GitRevision SelectedRevision, string Filename) blameInfo))
             {
-                return;
-            }
-
-            ObjectId selectedId = _lastBlameLine.Commit.ObjectId;
-            if (_revisionGridUpdate is null)
-            {
-                using FormCommitDiff frm = new(UICommands, selectedId);
-                frm.ShowDialog(this);
-                return;
-            }
-
-            _clickedBlameLine = _lastBlameLine;
-            if (!_revisionGridUpdate.SetSelectedRevision(selectedId))
-            {
-                MessageBoxes.RevisionFilteredInGrid(this, selectedId);
+                BlameRevision(_lastBlameLine.Commit.ObjectId, blameInfo.Filename, _lastBlameLine);
             }
         }
 
@@ -551,7 +562,7 @@ namespace GitUI.Blame
 
             contextMenu.Tag = new GitBlameContext(_fileName, _lineIndex, GetBlameLine(), _blameId);
 
-            if (!TryGetSelectedRevision(out (GitRevision selectedRevision, string filename) blameinfo))
+            if (!TryGetRevision(GetBlameCommit(), out (GitRevision? SelectedRevision, string? Filename) blameinfo))
             {
                 blameRevisionToolStripMenuItem.Enabled = false;
 
@@ -561,15 +572,24 @@ namespace GitUI.Blame
             }
 
             blameRevisionToolStripMenuItem.Enabled = true;
-            blamePreviousRevisionToolStripMenuItem.Enabled = RevisionHasParent(blameinfo.selectedRevision);
 
             // Get parent for the actual revision, the selected revision may have rewritten parents.
             // The menu will be slightly slower in this situation.
-            bool RevisionHasParent(GitRevision? selectedRevision)
+            if (RevisionHasParent(_revisionGridInfo?.GetActualRevision(blameinfo.SelectedRevision)))
             {
-                GitRevision actualRevision = _revisionGridInfo?.GetActualRevision(selectedRevision);
-                return (actualRevision?.HasParent ?? false) && (_revisionGridInfo?.GetRevision(actualRevision?.FirstParentId) is not null);
+                blamePreviousRevisionToolStripMenuItem.Enabled = true;
+                blamePreviousRevisionToolStripMenuItem.Text = _blameActualPreviousRevision.Text;
             }
+            else
+            {
+                blamePreviousRevisionToolStripMenuItem.Enabled = RevisionHasParent(blameinfo.SelectedRevision);
+                blamePreviousRevisionToolStripMenuItem.Text = _blameVisiblePreviousRevision.Text;
+            }
+
+            return;
+
+            bool RevisionHasParent(GitRevision? revision)
+                => (revision?.HasParent is true) && (_revisionGridInfo?.GetRevision(revision?.FirstParentId) is not null);
         }
 
         private GitBlameCommit? GetBlameCommit()
@@ -612,9 +632,8 @@ namespace GitUI.Blame
             CopyToClipboard(c => c.ObjectId.ToString());
         }
 
-        private bool TryGetSelectedRevision([NotNullWhen(returnValue: true)] out (GitRevision? selectedRevision, string? filename) blameInfo)
+        private bool TryGetRevision(GitBlameCommit? blameCommit, [NotNullWhen(returnValue: true)] out (GitRevision? selectedRevision, string? filename) blameInfo)
         {
-            GitBlameCommit blameCommit = GetBlameCommit();
             if (blameCommit is null)
             {
                 blameInfo = (null, null);
@@ -627,54 +646,57 @@ namespace GitUI.Blame
 
         private void blameRevisionToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (!TryGetSelectedRevision(out (GitRevision selectedRevision, string filename) blameInfo))
+            if (!TryGetRevision(GetBlameCommit(), out (GitRevision SelectedRevision, string Filename) blameInfo))
             {
                 return;
             }
 
-            _clickedBlameLine = _lastBlameLine;
-
-            BlameRevision(blameInfo.selectedRevision.ObjectId, blameInfo.filename);
+            BlameRevision(blameInfo.SelectedRevision.ObjectId, blameInfo.Filename, _lastBlameLine);
         }
 
         private void blamePreviousRevisionToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            if (!TryGetSelectedRevision(out (GitRevision selectedRevision, string filename) blameInfo))
+            if (!TryGetRevision(GetBlameCommit(), out (GitRevision? SelectedRevision, string? Filename) blameInfo))
             {
                 return;
             }
 
-            // Try get actual parent revision, get popup if it does not exist.
-            // (The menu should be disabled if previous is not in grid).
-            GitRevision selectedRevision = _revisionGridInfo!.GetActualRevision(blameInfo.selectedRevision);
+            GitRevision? selectedRevision = blameInfo.SelectedRevision;
+            if (blamePreviousRevisionToolStripMenuItem.Text == _blameActualPreviousRevision.Text)
+            {
+                // Try get actual parent revision, get popup if it does not exist.
+                // (The menu should be disabled if previous is not in grid).
+                selectedRevision = _revisionGridInfo!.GetActualRevision(selectedRevision);
+            }
 
             // Origin line of commit selected is final line of the previous blame commit
             int finalLineNumberOfPreviousBlame = _lastBlameLine!.OriginLineNumber;
-            int originalLineNumberOfPreviousBlame = _gitBlameParser.GetOriginalLineInPreviousCommit(selectedRevision, blameInfo.filename, finalLineNumberOfPreviousBlame);
+            int originalLineNumberOfPreviousBlame = _gitBlameParser.GetOriginalLineInPreviousCommit(selectedRevision, blameInfo.Filename, finalLineNumberOfPreviousBlame);
 
-            _clickedBlameLine = new GitBlameLine(_lastBlameLine.Commit, finalLineNumberOfPreviousBlame, originalLineNumberOfPreviousBlame, "Dummy Git blame line used only to store the good 'originLineNumber' value to display and select it");
-            BlameRevision(selectedRevision.FirstParentId, blameInfo.filename);
+            GitBlameLine blameLine = new(_lastBlameLine.Commit, finalLineNumberOfPreviousBlame, originalLineNumberOfPreviousBlame, "Dummy Git blame line used only to store the good 'originLineNumber' value to display and select it");
+            BlameRevision(selectedRevision.FirstParentId, blameInfo.Filename, blameLine);
         }
 
         /// <summary>
         /// Blame a specific revision
         /// </summary>
-        /// <param name="revisionId">the commit id to blame</param>
+        /// <param name="commitId">the commit id to blame</param>
         /// <param name="filename">the relative path of the file to blame in this commit (because it could have been renamed)</param>
-        private void BlameRevision(ObjectId? revisionId, string filename)
+        private void BlameRevision(ObjectId commitId, string filename, GitBlameLine blameLine)
         {
-            if (_revisionGridUpdate is not null)
+            _clickedBlameLine = blameLine;
+
+            if (_revisionGridFileUpdate is not null)
             {
-                PathToBlame = filename;
-                if (!_revisionGridUpdate.SetSelectedRevision(revisionId))
+                if (!_revisionGridFileUpdate.SelectFileInRevision(commitId, RelativePath.From(filename)))
                 {
-                    MessageBoxes.RevisionFilteredInGrid(this, revisionId);
+                    MessageBoxes.RevisionFilteredInGrid(this, commitId);
                 }
 
                 return;
             }
 
-            using FormCommitDiff frm = new(UICommands, revisionId);
+            using FormCommitDiff frm = new(UICommands, commitId);
             frm.ShowDialog(this);
         }
 

@@ -1,9 +1,11 @@
-﻿using GitCommands;
+﻿#nullable enable
+
+using GitCommands.Git;
 using Microsoft;
 
 namespace GitUI.CommandsDialogs.SettingsDialog.Pages
 {
-    public partial class GitConfigAdvancedSettingsPage : ConfigFileSettingsPage
+    public partial class GitConfigAdvancedSettingsPage : GitConfigBaseSettingsPage
     {
         private record GitSettingUiMapping(string GitSettingKey, CheckBox MappedCheckbox);
         private readonly List<GitSettingUiMapping> _gitSettings;
@@ -18,9 +20,12 @@ namespace GitUI.CommandsDialogs.SettingsDialog.Pages
             [
                 new("pull.rebase", checkBoxPullRebase),
                 new("fetch.prune", checkBoxFetchPrune),
-                new("rebase.autoStash", checkBoxRebaseAutostash),
+                new("merge.autostash", checkboxMergeAutoStash),
+                new("rebase.autostash", checkBoxRebaseAutostash),
                 new("rebase.autosquash", checkBoxRebaseAutosquash),
-                new("rebase.updateRefs", checkBoxUpdateRefs)
+                new("rebase.updaterefs", checkBoxUpdateRefs),
+                new("rerere.enabled", checkBoxReReReEnabled),
+                new("rerere.autoupdate", checkBoxReReReAutoUpdate),
             ];
 
             checkBoxUpdateRefs.Visible = GitVersion.Current.SupportUpdateRefs;
@@ -41,7 +46,12 @@ namespace GitUI.CommandsDialogs.SettingsDialog.Pages
             Validates.NotNull(CurrentSettings);
             foreach (GitSettingUiMapping gitSetting in _gitSettings)
             {
-                gitSetting.MappedCheckbox.Checked = CurrentSettings.GetValue<bool>(gitSetting.GitSettingKey) is true;
+                gitSetting.MappedCheckbox.CheckState = CurrentSettings.GetValue(gitSetting.GitSettingKey) switch
+                    {
+                        "true" or "yes" or "on" or "1" => CheckState.Checked,
+                        "false" or "no" or "off" or "0" or "" => CheckState.Unchecked,
+                        _ => CheckState.Indeterminate
+                    };
             }
 
             base.SettingsToPage();
@@ -52,7 +62,7 @@ namespace GitUI.CommandsDialogs.SettingsDialog.Pages
             Validates.NotNull(CurrentSettings);
             foreach (GitSettingUiMapping gitSetting in _gitSettings)
             {
-                CurrentSettings.SetValue(gitSetting.GitSettingKey, gitSetting.MappedCheckbox.Checked ? "true" : "false");
+                CurrentSettings.SetValue(gitSetting.GitSettingKey, gitSetting.MappedCheckbox.CheckState switch { CheckState.Checked => "true", CheckState.Unchecked => "false", _ => null });
             }
 
             base.PageToSettings();

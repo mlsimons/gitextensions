@@ -5,8 +5,10 @@ using GitExtensions.Extensibility;
 using GitExtensions.Extensibility.Git;
 using GitExtensions.Extensibility.Translations;
 using GitExtUtils.GitUI;
+using GitExtUtils.GitUI.Theming;
 using GitUI.CommandsDialogs.BrowseDialog;
 using GitUI.Properties;
+using GitUI.Theming;
 using GitUI.UserControls;
 using GitUIPluginInterfaces;
 using Microsoft;
@@ -14,22 +16,23 @@ using ResourceManager;
 
 namespace GitUI.CommandsDialogs
 {
-    public sealed partial class FormFileHistory : GitModuleForm
+    public sealed partial class FormFileHistory : GitModuleForm, IRevisionGridFileUpdate
     {
         private const string FormBrowseName = "FormBrowse";
 
         private readonly TranslationString _buildReportTabCaption = new("Build Report");
+        private readonly TranslationString _fileNotFound = new(" - Git could not identify the file {0}");
         private readonly AsyncLoader _asyncLoader = new();
         private readonly ICommitDataManager _commitDataManager;
         private readonly FormBrowseMenus _formBrowseMenus;
         private readonly IFullPathResolver _fullPathResolver;
-        private readonly FormFileHistoryController _controller = new();
         private readonly CancellationTokenSequence _customDiffToolsSequence = new();
         private readonly CancellationTokenSequence _viewChangesSequence = new();
 
         private BuildReportTabPageExtension? _buildReportTabPageExtension;
+        private string? _commitInfoTabPageText;
 
-        private string FileName { get; set; }
+        private string FileName { get; init; }
 
         /// <summary>
         /// Open FileHistory form.
@@ -49,7 +52,7 @@ namespace GitUI.CommandsDialogs
 
             Color toolForeColor = SystemColors.WindowText;
             Color toolBackColor = Color.Transparent;
-            BackColor = SystemColors.Window;
+            BackColor = AppColor.PanelBackground.GetThemeColor();
             ForeColor = toolForeColor;
             ToolStripFilters.BackColor = toolBackColor;
             ToolStripFilters.ForeColor = toolForeColor;
@@ -79,7 +82,11 @@ namespace GitUI.CommandsDialogs
             RevisionGrid.ShowBuildServerInfo = true;
             RevisionGrid.FilePathByObjectId = [];
 
-            FileName = fileName;
+            // Replace Windows path separator to Linux path separator.
+            // This is needed to keep the file history working when started from file tree in
+            // browse dialog.
+            FileName = fileName.RemoveQuotes().ToPosixPath();
+
             SetTitle();
 
             Diff.ExtraDiffArgumentsChanged += (sender, e) => UpdateSelectedFileViewers();
@@ -212,12 +219,7 @@ namespace GitUI.CommandsDialogs
                 return;
             }
 
-            // Replace windows path separator to Linux path separator.
-            // This is needed to keep the file history working when started from file tree in
-            // browse dialog.
-            FileName = FileName.ToPosixPath();
-
-            RevisionGrid.SetAndApplyPathFilter(FileName);
+            RevisionGrid.SetAndApplyPathFilter(FileName.Quote());
         }
 
         private string? GetFileNameForRevision(GitRevision rev)
@@ -265,8 +267,18 @@ namespace GitUI.CommandsDialogs
             GitRevision revision = selectedRevisions[0];
             IReadOnlyList<ObjectId> children = RevisionGrid.GetRevisionChildren(revision.ObjectId);
             string fileName = GetFileNameForRevision(revision) ?? FileName;
+            bool isFolder = fileName.EndsWith('/');
+            bool fileAvailable
+                = isFolder ? false
+                : revision.IsArtificial ? File.Exists(fileName)
+                : Module.GetFileBlobHash(fileName, revision.ObjectId) is not null;
 
-            SetTitle(fileName);
+            SetTitle(alternativeFileName: fileName);
+
+            _commitInfoTabPageText ??= CommitInfoTabPage.Text;
+            CommitInfoTabPage.Text
+                = _commitInfoTabPageText
+                + (isFolder || fileAvailable ? "" : string.Format(_fileNotFound.Text, fileName.Quote()));
 
             TabPage preferredTab = null;
             if (revision.IsArtificial)
@@ -282,7 +294,7 @@ namespace GitUI.CommandsDialogs
                 }
             }
 
-            if (fileName.EndsWith("/"))
+            if (!fileAvailable)
             {
                 // Note that artificial commits for object type tree (folder) will be handled here too,
                 // i.e. no tab at all is visible
@@ -299,7 +311,7 @@ namespace GitUI.CommandsDialogs
                 }
             }
 
-            if (revision.IsArtificial || fileName.EndsWith("/"))
+            if (revision.IsArtificial || !fileAvailable)
             {
                 BlameTab.Parent = null;
                 ViewTab.Parent = null;
@@ -328,7 +340,7 @@ namespace GitUI.CommandsDialogs
 
             if (tabControl1.SelectedTab == BlameTab)
             {
-                _ = Blame.LoadBlameAsync(revision, children, fileName, revisionGridInfo: RevisionGrid, revisionGridUpdate: RevisionGrid, controlToMask: BlameTab, Diff.Encoding, force: force, cancellationToken: _viewChangesSequence.Next());
+                _ = Blame.LoadBlameAsync(revision, children, fileName, revisionGridInfo: RevisionGrid, revisionGridFileUpdate: this, controlToMask: BlameTab, Diff.Encoding, force: force, cancellationTokenSequence: _viewChangesSequence);
             }
             else if (tabControl1.SelectedTab == ViewTab)
             {
@@ -541,11 +553,11 @@ namespace GitUI.CommandsDialogs
             if (e.Command == "gotocommit")
             {
                 Validates.NotNull(e.Data);
-                if (Module.TryResolvePartialCommitId(e.Data, out ObjectId? objectId))
+                if (Module.TryResolvePartialCommitId(e.Data, out ObjectId? commitId))
                 {
-                    if (!RevisionGrid.SetSelectedRevision(objectId))
+                    if (!RevisionGrid.SetSelectedRevision(commitId))
                     {
-                        MessageBoxes.RevisionFilteredInGrid(this, objectId);
+                        MessageBoxes.RevisionFilteredInGrid(this, commitId);
                     }
                }
             }
@@ -685,6 +697,9 @@ namespace GitUI.CommandsDialogs
         {
             FormGitCommandLog.ShowOrActivate(this);
         }
+
+        bool IRevisionGridFileUpdate.SelectFileInRevision(ObjectId commitId, RelativePath ignoredFilename)
+            => RevisionGrid.SetSelectedRevision(commitId);
 
         internal TestAccessor GetTestAccessor()
             => new(this);

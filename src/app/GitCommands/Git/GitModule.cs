@@ -1,4 +1,4 @@
-using System.ComponentModel;
+using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security;
@@ -8,6 +8,7 @@ using GitCommands.Config;
 using GitCommands.Git;
 using GitCommands.Git.Extensions;
 using GitCommands.Patches;
+using GitCommands.Remotes;
 using GitCommands.Settings;
 using GitCommands.Utils;
 using GitExtensions.Extensibility;
@@ -28,6 +29,8 @@ namespace GitCommands
     public sealed partial class GitModule : IGitModule
     {
         private const string GitError = "Git Error";
+
+        private static readonly Encoding _defaultEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         private static readonly IGitDirectoryResolver GitDirectoryResolverInstance = new GitDirectoryResolver();
 
         // the amount of lines we must skip in order to get to an annotated tag's message when doing git cat-file -p <tag_name>
@@ -42,6 +45,7 @@ namespace GitCommands
         private readonly IGitTreeParser _gitTreeParser = new GitTreeParser();
         private readonly IRevisionDiffProvider _revisionDiffProvider = new RevisionDiffProvider();
         private readonly GetAllChangedFilesOutputParser _getAllChangedFilesOutputParser;
+        private FrozenDictionary<string, Color>? _remoteColors;
 
         // The executable may use Windows Git (native to the app, always used in special situations) or WSL Git.
         private readonly IGitCommandRunner _gitCommandRunner;
@@ -68,7 +72,7 @@ namespace GitCommands
         [GeneratedRegex(@"(\\(?<octal>[0-7]{3}))+", RegexOptions.ExplicitCapture)]
         private static partial Regex EscapedOctalCodePointRegex();
 
-        [GeneratedRegex(@"^(?<code>[ -+U])(?<sha>[0-9a-f]{40}) (?<path>.+) \((?<branch>.+)\)$", RegexOptions.ExplicitCapture)]
+        [GeneratedRegex(@"^(?<code>[\-+U ])(?<sha>[0-9a-f]{40}) (?<path>.+) \((?<branch>.+)\)$", RegexOptions.ExplicitCapture)]
         private static partial Regex ShaRegex();
 
         [GeneratedRegex(@"^\s*(?<count>\d+)\s+(?<name>.*)$", RegexOptions.ExplicitCapture)]
@@ -93,7 +97,9 @@ namespace GitCommands
             _wslDistro = AppSettings.WslGitEnabled ? PathUtil.GetWslDistro(WorkingDir) : "";
             if (!string.IsNullOrEmpty(_wslDistro))
             {
-                _gitExecutable = new Executable(() => AppSettings.WslGitCommand, WorkingDir, $"-d {_wslDistro} {AppSettings.WslGitPath} ");
+                // In some WSL environments the current working directory is not passed along to the git command without using the `--cd` argument. Adding it to
+                // the command line is required for these environments. For those that do not need it using the argument is just redundant.
+                _gitExecutable = new Executable(() => AppSettings.WslCommand, WorkingDir, $"-d {_wslDistro} --cd {WorkingDir.RemoveTrailingPathSeparator().Quote()} {AppSettings.WslGitCommand} ");
                 _gitCommandRunner = new GitCommandRunner(_gitExecutable, () => SystemEncoding);
             }
             else
@@ -191,7 +197,7 @@ namespace GitCommands
         /// <summary>
         /// GitVersion for the default GitExecutable.
         /// </summary>
-        public IGitVersion GitVersion => GitCommands.GitVersion.CurrentVersion(GitExecutable, _wslDistro);
+        public IGitVersion GitVersion => Git.GitVersion.CurrentVersion(GitExecutable);
 
         /// <inherit/>
         public IExecutable GitExecutable => _gitExecutable;
@@ -277,28 +283,25 @@ namespace GitCommands
             }
         }
 
-        private ConfigFileSettings? _effectiveConfigFile;
-
-        public IConfigFileSettings EffectiveConfigFile
+        private GitEncodingSettingsGetter GitEncodingSettingsGetter
         {
             get
             {
-                if (_effectiveConfigFile is null)
+                if (field is null)
                 {
                     lock (_lock)
                     {
-                        _effectiveConfigFile ??= ConfigFileSettings.CreateEffective(module: this);
+                        field ??= new GitEncodingSettingsGetter(new EffectiveGitConfigSettings(GitExecutable));
                     }
                 }
 
-                return _effectiveConfigFile;
+                return field;
             }
         }
 
-        public IConfigFileSettings LocalConfigFile
-            => new ConfigFileSettings(lowerPriority: null, ((ConfigFileSettings)EffectiveConfigFile).SettingsCache, SettingLevel.Local);
+        private ISettingsValueGetter EffectiveGitConfigSettings => GitEncodingSettingsGetter.SettingsValueGetter;
 
-        IConfigFileSettings IGitModule.LocalConfigFile => LocalConfigFile;
+        private IGitConfigSettingsGetter LocalGitConfigSettings => field ??= new GitConfigSettings(GitExecutable, GitSettingLevel.Local);
 
         // encoding for files paths
         private static Encoding? _systemEncoding;
@@ -316,11 +319,19 @@ namespace GitCommands
         // 4) branch, tag name, errors, warnings, hints encoded in system default encoding
         public static readonly Encoding LosslessEncoding = Encoding.GetEncoding("ISO-8859-1"); // is any better?
 
-        public Encoding FilesEncoding => ((ConfigFileSettings)EffectiveConfigFile).FilesEncoding ?? new UTF8Encoding(false);
+        public Encoding FilesEncoding => GitEncodingSettingsGetter.FilesEncoding ?? _defaultEncoding;
 
-        public Encoding CommitEncoding => ((ConfigFileSettings)EffectiveConfigFile).CommitEncoding ?? new UTF8Encoding(false);
+        public Encoding CommitEncoding => GitEncodingSettingsGetter.CommitEncoding ?? _defaultEncoding;
 
-        public Encoding LogOutputEncoding => ((ConfigFileSettings)EffectiveConfigFile).LogOutputEncoding ?? CommitEncoding;
+        public Encoding LogOutputEncoding => GitEncodingSettingsGetter.LogOutputEncoding ?? CommitEncoding;
+
+        public IEnumerable<(string Setting, string Value)> GetAllLocalSettings() => LocalGitConfigSettings.GetAllValues();
+
+        public void InvalidateGitSettings()
+        {
+            EffectiveGitConfigSettings.Invalidate();
+            LocalGitConfigSettings.Invalidate();
+        }
 
         /// <summary>Indicates whether the <see cref="WorkingDir"/> contains a git repository.</summary>
         public bool IsValidGitWorkingDir()
@@ -639,16 +650,19 @@ namespace GitCommands
             return retValue;
         }
 
-        public void SaveBlobAs(string saveAs, string blob)
+        public void SaveBlobAs(string saveAs, string blob, CancellationToken cancellationToken = default)
+            => ThreadHelper.FileAndForget(() => SaveBlobAsAsync(saveAs, blob, cancellationToken));
+
+        public async Task SaveBlobAsAsync(string saveAs, string blob, CancellationToken cancellationToken)
         {
-            using MemoryStream blobStream = GetFileStream(blob);
+            using MemoryStream blobStream = await GetFileStreamAsync(blob, cancellationToken);
             if (blobStream is null)
             {
                 return;
             }
 
             byte[] blobData = blobStream.ToArray();
-            if (((ConfigFileSettings)EffectiveConfigFile).ByPath("core").GetNullableEnum<AutoCRLFType>("autocrlf") is AutoCRLFType.@true)
+            if (GetEffectiveSetting<AutoCRLFType>("core.autocrlf") is AutoCRLFType.@true)
             {
                 if (!FileHelper.IsBinaryFileName(this, saveAs) && !FileHelper.IsBinaryFileAccordingToContent(blobData))
                 {
@@ -664,7 +678,7 @@ namespace GitCommands
             }
 
             using FileStream stream = File.Create(saveAs);
-            stream.Write(blobData, 0, blobData.Length);
+            await stream.WriteAsync(blobData, 0, blobData.Length);
         }
 
         private static string GetSide(string side)
@@ -761,7 +775,7 @@ namespace GitCommands
             {
                 "-z",
                 "--unmerged",
-                { !string.IsNullOrWhiteSpace(filename), "--" },
+                "--",
                 filename.QuoteNE()
             };
 
@@ -827,8 +841,9 @@ namespace GitCommands
         {
             GitArgumentBuilder args = new("ls-tree")
             {
+                // optimized codepath, default is "--format={_gitTreeParser.GitTreeFormat}"
                 refName.Quote(),
-                { !string.IsNullOrWhiteSpace(filename), "--" },
+                "--",
                 filename.QuoteNE()
             };
             string output = _gitExecutable.GetOutput(args);
@@ -949,11 +964,11 @@ namespace GitCommands
         {
             // Use Windows Git if custom tool is selected as the list is native to the application.
             bool isWindowsGit = !string.IsNullOrWhiteSpace(customTool);
-            string gui = (isWindowsGit ? GitCommands.GitVersion.Current : GitVersion).SupportGuiMergeTool ? "--gui" : string.Empty;
+            string gui = (isWindowsGit ? Git.GitVersion.Current : GitVersion).SupportGuiMergeTool ? "--gui" : string.Empty;
             GitArgumentBuilder args = new("mergetool")
             {
                 { string.IsNullOrWhiteSpace(customTool), gui, $"--tool={customTool}" },
-                { !string.IsNullOrWhiteSpace(fileName), "--" },
+                "--",
                 fileName.ToPosixPath().QuoteNE()
             };
 
@@ -1373,6 +1388,7 @@ namespace GitCommands
             List<string> filesToCheckout = [];
             List<string> filesToReset = [];
             List<string> filesCannotCheckout = [];
+            HashSet<GitItemStatus> deletedItems = [];
             output = new();
             Lazy<List<GitItemStatus>> postUnstageStatus = new(() => GetAllChangedFilesWithSubmodulesStatus().ToList());
 
@@ -1387,10 +1403,12 @@ namespace GitCommands
                         if (File.Exists(path))
                         {
                             File.Delete(path);
+                            deletedItems.Add(item);
                         }
                         else if (Directory.Exists(path))
                         {
                             Directory.Delete(path, recursive: true);
+                            deletedItems.Add(item);
                         }
                     }
                     catch (IOException)
@@ -1404,7 +1422,7 @@ namespace GitCommands
 
                 if (resetId == ObjectId.IndexId)
                 {
-                    if (!postUnstageStatus.Value.Any(i => i.Name == item.Name))
+                    if (deletedItems.Contains(item) || !postUnstageStatus.Value.Any(i => i.Name == item.Name))
                     {
                         // Already removed (for instance new file)
                         continue;
@@ -1459,7 +1477,7 @@ namespace GitCommands
             // 'git-checkout --' must be used for Index (git-reset will copy HEAD to Index, git-restore from 2.25 could be used).
             // However, Unmerged (Conflict) files cannot be checked out to Index.
             static bool UnmergedIndex(GitItemStatus item, Lazy<List<GitItemStatus>> status)
-                => status.Value.Any(i => (i.IsUnmerged || i.IsNew) && i.Name == item.Name) || !status.Value.Any(i => i.Name == item.Name);
+                => status.Value.Any(i => (i.IsUnmerged || (i.IsNew && i.Staged == item.Staged)) && i.Name == item.Name) || !status.Value.Any(i => i.Name == item.Name);
         }
 
         /// <summary>
@@ -1602,8 +1620,8 @@ namespace GitCommands
         {
             return new ArgumentBuilder
             {
-                { string.IsNullOrWhiteSpace(EffectiveConfigFile.GetValue("fetch.parallel")), "-c fetch.parallel=0" },
-                { string.IsNullOrWhiteSpace(EffectiveConfigFile.GetValue("submodule.fetchJobs")), "-c submodule.fetchJobs=0" },
+                { string.IsNullOrWhiteSpace(GetEffectiveSetting("fetch.parallel")), "-c fetch.parallel=0" },
+                { string.IsNullOrWhiteSpace(GetEffectiveSetting("submodule.fetchjobs")), "-c submodule.fetchjobs=0" },
             };
         }
 
@@ -1743,7 +1761,7 @@ namespace GitCommands
                     {
                         foreach (GitItemStatus file in nonDeletedFiles)
                         {
-                            UpdateIndex(inputWriter, file.Name);
+                            UpdateIndex(inputWriter, file.Name.TrimEnd('/'));
                         }
                     },
                     SystemEncoding,
@@ -1961,6 +1979,12 @@ namespace GitCommands
             return InTheMiddleOfConflictedMerge() || InTheMiddleOfRebase();
         }
 
+        public void RemoveConfigSection(string section, string? subsection)
+        {
+            GitExecutable.RemoveConfigSection(GitSettingLevel.Local, section, subsection);
+            InvalidateGitSettings();
+        }
+
         public string RemoveRemote(string remoteName)
         {
             GitArgumentBuilder args = new("remote")
@@ -1968,7 +1992,9 @@ namespace GitCommands
                 "rm",
                 remoteName.QuoteNE()
             };
-            return _gitExecutable.GetOutput(args);
+            string output = _gitExecutable.GetOutput(args);
+            InvalidateGitSettings();
+            return output;
         }
 
         public string RenameRemote(string remoteName, string newName)
@@ -1979,18 +2005,9 @@ namespace GitCommands
                 remoteName.QuoteNE(),
                 newName.QuoteNE()
             };
-            return _gitExecutable.GetOutput(args);
-        }
-
-        public string RenameBranch(string name, string newName)
-        {
-            GitArgumentBuilder args = new("branch")
-            {
-                "-m",
-                name.QuoteNE(),
-                newName.QuoteNE()
-            };
-            return _gitExecutable.GetOutput(args);
+            string output = _gitExecutable.GetOutput(args);
+            InvalidateGitSettings();
+            return output;
         }
 
         public string AddRemote(string? name, string? path)
@@ -2000,13 +2017,15 @@ namespace GitCommands
                 return "Please enter a name.";
             }
 
-            return _gitExecutable.GetOutput(
-                new GitArgumentBuilder("remote")
-                {
-                    "add",
-                    name.Quote(),
-                    GetPathForGitExecution(path).QuoteNE()
-                });
+            GitArgumentBuilder args = new("remote")
+            {
+                "add",
+                name.Quote(),
+                GetPathForGitExecution(path).QuoteNE()
+            };
+            string output = _gitExecutable.GetOutput(args);
+            InvalidateGitSettings();
+            return output;
         }
 
         public IReadOnlyList<string> GetRemoteNames()
@@ -2095,52 +2114,45 @@ namespace GitCommands
             }
         }
 
-        public IEnumerable<string> GetSettings(string setting)
+        public FrozenDictionary<string, Color> GetRemoteColors()
         {
-            return ((ConfigFileSettings)LocalConfigFile).GetValues(setting);
-        }
-
-        public string GetSetting(string setting) => LocalConfigFile.GetValue(setting);
-        public T? GetSetting<T>(string setting) where T : struct => LocalConfigFile.GetValue<T>(setting);
-
-        public string GetEffectiveSetting(string setting) => EffectiveConfigFile.GetValue(setting);
-        public T? GetEffectiveSetting<T>(string setting) where T : struct => EffectiveConfigFile.GetValue<T>(setting);
-
-        public SettingsSource GetEffectiveSettingsByPath(string path)
-        {
-            return ((ConfigFileSettings)EffectiveConfigFile).ByPath(path);
-        }
-
-        public string? GetGitSetting(string setting, string scopeArg, bool cache = false)
-        {
-            GitArgumentBuilder args = new("config") { "--includes", scopeArg, "--get", setting };
-            ExecutionResult result = GitExecutable.Execute(args, cache: cache ? GitCommandCache : null, throwOnErrorExit: false);
-
-            // Handle no value set, is error code 1: https://git-scm.com/docs/git-config#_description
-            const int ConfigKeyInvalidOrNotSet = 1;
-            if (result.ExitCode == ConfigKeyInvalidOrNotSet)
+            if (_remoteColors is null)
             {
-                return null;
+                lock (_lock)
+                {
+                    _remoteColors ??= new ConfigFileRemoteSettingsManager(getModule: () => this)
+                                .LoadRemotes(loadDisabled: false)
+                                .Where(r => !string.IsNullOrEmpty(r.Color) && !string.IsNullOrEmpty(r.Name))
+                                .ToFrozenDictionary(r => r.Name, r => ColorTranslator.FromHtml(r.Color), StringComparer.Ordinal);
+                }
             }
 
-            result.ThrowIfErrorExit("Error getting config value");
-
-            return result.StandardOutput.Trim();
+            return _remoteColors;
         }
 
-        public string? GetEffectiveGitSetting(string setting, bool cache = false)
+        public void ResetRemoteColors()
         {
-            return GetGitSetting(setting, scopeArg: "", cache);
+            lock (_lock)
+            {
+                _remoteColors = null;
+            }
         }
+
+        public IEnumerable<string> GetSettings(string setting) => LocalGitConfigSettings.GetValues(setting);
+
+        public string GetSetting(string setting) => GetEffectiveSetting(setting);
+
+        public string GetEffectiveSetting(string setting, string defaultValue = "") => EffectiveGitConfigSettings.GetValue(setting) ?? defaultValue;
+        public T? GetEffectiveSetting<T>(string setting) where T : struct => EffectiveGitConfigSettings.GetValue<T>(setting);
 
         public void UnsetSetting(string setting)
         {
-            SetSetting(setting, null);
+            SetGitSetting(GitSettingLevel.Local, setting, value: null);
         }
 
-        public void SetSetting(string setting, string? value)
+        public void SetSetting(string setting, string value, bool append = false)
         {
-            ((ConfigFileSettings)LocalConfigFile).SetValue(setting, value);
+            SetGitSetting(GitSettingLevel.Local, setting, value, append);
         }
 
         internal GitArgumentBuilder GetStashesCmd(bool noLocks)
@@ -2240,6 +2252,7 @@ namespace GitCommands
 
             GitArgumentBuilder args = new("diff", commandConfiguration)
             {
+                "--no-ext-diff",
                 "--find-renames",
                 "--find-copies",
                 { useGitColoring, "--color=always" },
@@ -2265,7 +2278,7 @@ namespace GitCommands
                 cancellationToken: cancellationToken);
             if (!result.ExitedSuccessfully)
             {
-                return (Patch: null, ErrorMessage: $"{result.StandardError}{Environment.NewLine}Git command (exit code: {result.ExitCode}): {args}{Environment.NewLine}");
+                return (Patch: null, ErrorMessage: $"{result.StandardError}{Environment.NewLine}Git command (exit code: {result.ExitCodeDisplay}): {args}{Environment.NewLine}");
             }
 
             string patch = result.StandardOutput;
@@ -2342,7 +2355,7 @@ namespace GitCommands
             });
         }
 
-        private ExecutionResult GetGrepFiles(ObjectId objectId, string grepString, CancellationToken cancellationToken = default)
+        private ExecutionResult GetGrepFiles(ObjectId objectId, string grepString, bool applyAppSettings, CancellationToken cancellationToken = default)
         {
             bool noCache = objectId.IsArtificial;
 
@@ -2351,9 +2364,9 @@ namespace GitCommands
                 {
                     "--files-with-matches",
                     "-z",
-                    AppSettings.GitGrepUserArguments.Value,
-                    { AppSettings.GitGrepIgnoreCase.Value, "--ignore-case" },
-                    { AppSettings.GitGrepMatchWholeWord.Value, "--word-regexp" },
+                    { applyAppSettings, AppSettings.GitGrepUserArguments.Value },
+                    { applyAppSettings && AppSettings.GitGrepIgnoreCase.Value, "--ignore-case" },
+                    { applyAppSettings && AppSettings.GitGrepMatchWholeWord.Value, "--word-regexp" },
                     grepString,
                     !objectId.IsArtificial ? objectId.ToString() : objectId == ObjectId.IndexId ? "--cached" : "",
                     "--"
@@ -2363,10 +2376,10 @@ namespace GitCommands
                 cancellationToken: cancellationToken);
         }
 
-        public IReadOnlyList<GitItemStatus> GetGrepFilesStatus(ObjectId objectId, string grepString, CancellationToken cancellationToken)
+        public IReadOnlyList<GitItemStatus> GetGrepFilesStatus(ObjectId objectId, string grepString, bool applyAppSettings, CancellationToken cancellationToken)
         {
             List<GitItemStatus> result = [];
-            ExecutionResult exec = GetGrepFiles(objectId, grepString, cancellationToken);
+            ExecutionResult exec = GetGrepFiles(objectId, grepString, applyAppSettings, cancellationToken);
             if (!exec.ExitedSuccessfully)
             {
                 // Cannot see difference from error and no matches
@@ -2394,6 +2407,7 @@ namespace GitCommands
             ArgumentString extraArgs,
             string grepString,
             bool useGitColoring,
+            bool showFunctionName,
             IGitCommandConfiguration commandConfiguration,
             CancellationToken cancellationToken)
         {
@@ -2402,6 +2416,7 @@ namespace GitCommands
             GitArgumentBuilder args = new("grep", commandConfiguration: commandConfiguration)
             {
                 "--line-number",
+                { showFunctionName, "--show-function" },
                 { !useGitColoring, "--column" },
                 { useGitColoring, "--color=always" },
                 extraArgs,
@@ -2411,7 +2426,7 @@ namespace GitCommands
                 grepString,
                 !objectId.IsArtificial ? objectId.ToString() : objectId == ObjectId.IndexId ? "--cached" : "",
                 "--",
-                fileName
+                fileName.Quote()
             };
 
             return await _gitExecutable.ExecuteAsync(
@@ -2436,6 +2451,7 @@ namespace GitCommands
             return _gitExecutable.Execute(
                 new GitArgumentBuilder("diff")
                 {
+                    "--no-ext-diff",
                     "--find-renames",
                     "--find-copies",
                     "--name-status",
@@ -2493,7 +2509,7 @@ namespace GitCommands
             if (stagedStatus is StagedStatus.WorkTree or StagedStatus.Index)
             {
                 IReadOnlyList<GitItemStatus> status = GetAllChangedFilesWithSubmodulesStatus(cancellationToken: cancellationToken);
-                return status.Where(x => x.Staged == stagedStatus).ToList();
+                return status.Where(x => x.Staged == stagedStatus || x.IsStatusOnly).ToList();
             }
 
             ExecutionResult exec = GetDiffFiles(firstRevision, secondRevision, noCache: noCache, nullSeparated: true, cancellationToken);
@@ -2550,33 +2566,21 @@ namespace GitCommands
             return resultCollection;
         }
 
-        public IReadOnlyList<GitItemStatus> GetTreeFiles(ObjectId commitId, bool full)
-        {
-            IEnumerable<INamedGitItem> tree = GetTree(commitId, full);
-
-            List<GitItemStatus> list = tree
-                .Select(file => new GitItemStatus(name: file.Name)
+        public IReadOnlyList<GitItemStatus> GetTreeFiles(ObjectId commitId, bool full, CancellationToken cancellationToken = default)
+            => GetTree(commitId, full, cancellationToken: cancellationToken)
+                .Select(file => new GitItemStatus(file.Name)
                 {
+                    // IsTracked is always true, only tracked are reported
+                    // New/Changed/Deleted are are just set
                     IsTracked = true,
-                    IsNew = true,
+                    IsNew = false,
                     IsChanged = false,
                     IsDeleted = false,
                     TreeGuid = file.ObjectId,
-                    Staged = StagedStatus.None
-                }).ToList();
-
-            // Doesn't work with removed submodules
-            IReadOnlyList<string> submodulesList = GetSubmodulesLocalPaths();
-            foreach (GitItemStatus item in list)
-            {
-                if (submodulesList.Contains(item.Name))
-                {
-                    item.IsSubmodule = true;
-                }
-            }
-
-            return list;
-        }
+                    Staged = StagedStatus.Unset,
+                    IsSubmodule = file.ObjectType == GitObjectType.Commit
+                })
+                .ToList();
 
         public IReadOnlyList<GitItemStatus> GetAllChangedFiles(bool excludeIgnoredFiles = true,
             bool excludeAssumeUnchangedFiles = true, bool excludeSkipWorktreeFiles = true,
@@ -2704,6 +2708,7 @@ namespace GitCommands
         {
             GitArgumentBuilder args = new("diff")
             {
+                "--no-ext-diff",
                 "--find-renames",
                 "--find-copies",
                 "-z",
@@ -3134,25 +3139,13 @@ namespace GitCommands
             }
 
             string output = exec.StandardOutput;
-            string[] messageLines = output.Split(
-                new string[] { "\r\n", "\r", "\n" },
-                StringSplitOptions.None);
+            string[] messageLines = output.Split(Delimiters.NewLines, StringSplitOptions.None);
 
-            if (messageLines.Length <= StandardCatFileTagHeaderLength)
-            {
-                return null;
-            }
-
-            StringBuilder annotationBuilder = new();
-
-            // skip the last line as it will always be an empty line (for nice console output)
-            for (int i = StandardCatFileTagHeaderLength; i < messageLines.Length - 1; ++i)
-            {
-                annotationBuilder.AppendLine(messageLines[i]);
-            }
-
-            // return message, trimming off last new line (added by AppendLine)
-            return annotationBuilder.ToString().Trim();
+            return messageLines.Length <= StandardCatFileTagHeaderLength
+                ? null
+                : messageLines[StandardCatFileTagHeaderLength..]
+                    .Join(Environment.NewLine)
+                    .TrimEnd();
         }
 
         /// <summary>
@@ -3193,18 +3186,42 @@ namespace GitCommands
                 .Split(Delimiters.NullAndLineFeed);
         }
 
-        public IEnumerable<INamedGitItem> GetTree(ObjectId? commitId, bool full)
+        public IEnumerable<IObjectGitItem> GetTree(ObjectId? commitId, bool full, string fileName = "", CancellationToken cancellationToken = default)
         {
-            GitArgumentBuilder args = new("ls-tree")
+            bool isArtificial = commitId?.IsArtificial is true;
+            if (isArtificial && !full)
             {
-                "-z",
-                { full, "-r" },
-                commitId
-            };
+                throw new ArgumentOutOfRangeException(nameof(full), "Artificial commit requires 'full'.");
+            }
 
-            string tree = _gitExecutable.GetOutput(args, cache: GitCommandCache);
+            if (commitId == ObjectId.CombinedDiffId)
+            {
+                throw new ArgumentOutOfRangeException(nameof(commitId), "Cannot use CombinedDiffId.");
+            }
 
-            return _gitTreeParser.Parse(tree);
+            GitArgumentBuilder args = isArtificial
+                ? new("ls-files")
+                {
+                    // ls-files with same format as ls-tree
+                    "-z",
+                    { commitId == ObjectId.IndexId, "--cached", "--no-cached" },
+                    @$"--format=""{_gitTreeParser.GitTreeFormat}""",
+                    "--",
+                    fileName.QuoteNE()
+                }
+                : new("ls-tree")
+                {
+                    // optimized codepath, default is "--format={_gitTreeParser.GitTreeFormat}"
+                    "-z",
+                    { full, "-r" },
+                    commitId,
+                    "--",
+                    fileName.QuoteNE()
+                };
+
+            ExecutionResult result = _gitExecutable.Execute(args, cache: isArtificial ? null : GitCommandCache, cancellationToken: cancellationToken);
+
+            return _gitTreeParser.Parse(result.StandardOutput);
         }
 
         public GitBlame Blame(string? fileName, string from, Encoding encoding, string? lines, CancellationToken cancellationToken)
@@ -3470,86 +3487,34 @@ namespace GitCommands
             }
         }
 
-        public string GetFileText(ObjectId id, Encoding encoding)
+        public string? GetFileText(ObjectId id, Encoding encoding, bool stripAnsiEscapeCodes)
         {
             GitArgumentBuilder args = new("cat-file")
             {
                 "blob",
                 id.ToString().QuoteNE()
             };
-            return _gitExecutable.GetOutput(
-                args,
-                cache: GitCommandCache,
-                outputEncoding: encoding);
+
+            ExecutionResult exec = _gitExecutable.Execute(args, throwOnErrorExit: false, cache: GitCommandCache);
+            if (!exec.ExitedSuccessfully)
+            {
+                // blob did not exist, this could be a submodule that is removed
+                return null;
+            }
+
+            return exec.StandardOutput;
         }
 
         public ObjectId? GetFileBlobHash(string fileName, ObjectId objectId)
         {
-            if (objectId == ObjectId.WorkTreeId || objectId == ObjectId.CombinedDiffId)
-            {
-                throw new ArgumentException($"Tried to get blob for unsupported revision: {objectId} and file: {fileName}");
-            }
-
-            // TODO use regex for parsing
-            if (objectId == ObjectId.IndexId)
-            {
-                GitArgumentBuilder args = new("ls-files")
-                {
-                    "-s",
-                    { !string.IsNullOrWhiteSpace(fileName), "--" },
-                    fileName.QuoteNE()
-                };
-
-                // index
-                string[] lines = _gitExecutable.GetOutput(args).Split(Delimiters.TabAndSpace);
-
-                if (lines.Length >= 2)
-                {
-                    return ObjectId.Parse(lines[1]);
-                }
-            }
-            else
-            {
-                GitArgumentBuilder args = new("ls-tree")
-                {
-                    "-r",
-                    objectId,
-                    { !string.IsNullOrWhiteSpace(fileName), "--" },
-                    fileName.QuoteNE()
-                };
-                string[] lines = _gitExecutable.GetOutput(args).Split(Delimiters.TabAndSpace);
-                if (lines.Length >= 3)
-                {
-                    return ObjectId.Parse(lines[2]);
-                }
-            }
-
-            return null;
+            IEnumerable<IObjectGitItem> items = GetTree(objectId, full: true, fileName);
+            return items.Count() == 1 && items.First() is IObjectGitItem i && i.ObjectType is GitObjectType.Blob
+                ? i.ObjectId
+                : null;
         }
 
-        public MemoryStream? GetFileStream(string blob)
-        {
-            // TODO why return a stream here? should just return a byte[]
-
-            try
-            {
-                GitArgumentBuilder args = new("cat-file")
-                {
-                    "blob",
-                    blob
-                };
-                using IProcess process = _gitCommandRunner.RunDetached(CancellationToken.None, args, redirectOutput: true);
-                MemoryStream stream = new();
-                process.StandardOutput.BaseStream.CopyTo(stream);
-                stream.Position = 0;
-                return stream;
-            }
-            catch (Win32Exception ex)
-            {
-                Trace.WriteLine(ex);
-                return null;
-            }
-        }
+        public Task<MemoryStream?> GetFileStreamAsync(string blob, CancellationToken cancellationToken)
+            => GitFileStreamGetter.GetFileStreamAsync(blob, _gitCommandRunner, cancellationToken);
 
         public IEnumerable<string?> GetPreviousCommitMessages(int count, string revision, string authorPattern)
         {
@@ -3676,15 +3641,19 @@ namespace GitCommands
 
         public SubmoduleStatus CheckSubmoduleStatus(ObjectId? commit, ObjectId? oldCommit, CommitData? data, CommitData? oldData, bool loadData)
         {
-            // Submodule directory must exist to run commands, unknown otherwise
-            if (!IsValidGitWorkingDir() || oldCommit is null)
+            // Submodule directory must exist to run commands, just guess
+            if (oldCommit is null)
             {
                 return SubmoduleStatus.NewSubmodule;
             }
 
             if (commit is null)
             {
-                // Actually removed submodule, no special status for this uncommon status
+                return SubmoduleStatus.RemovedSubmodule;
+            }
+
+            if (!IsValidGitWorkingDir())
+            {
                 return SubmoduleStatus.Unknown;
             }
 
@@ -3956,14 +3925,16 @@ namespace GitCommands
         public string? GetLocalTrackingBranchName(string remoteName, string branch)
         {
             string branchName = remoteName.Length > 0 ? branch[(remoteName.Length + 1)..] : branch;
-            foreach (IConfigSection section in LocalConfigFile.GetConfigSections())
+            IGitConfigSettingsGetter localGitConfigSettings = LocalGitConfigSettings;
+            foreach ((string setting, string value) in localGitConfigSettings.GetAllValues())
             {
-                if (section.SectionName == "branch" && section.GetValue("remote") == remoteName)
+                (string section, string? subsection, string name) = IGitConfigSettingsGetter.SplitSetting(setting);
+                if (section == "branch" && name == "remote" && value == remoteName)
                 {
-                    string remoteBranch = section.GetValue("merge").Replace("refs/heads/", string.Empty);
+                    string? remoteBranch = localGitConfigSettings.GetValue($"{section}.{subsection}.merge")?.Replace("refs/heads/", string.Empty);
                     if (remoteBranch == branchName)
                     {
-                        return section.SubSection;
+                        return subsection;
                     }
                 }
             }
@@ -4146,6 +4117,17 @@ namespace GitCommands
             }
         }
 
+        private void SetGitSetting(GitSettingLevel settingLevel, string setting, string? value, bool append = false)
+        {
+            Commands.SetGitSetting(GitExecutable, settingLevel, setting, value, append);
+
+            EffectiveGitConfigSettings.Invalidate();
+            if (settingLevel == GitSettingLevel.Local)
+            {
+                LocalGitConfigSettings.Invalidate();
+            }
+        }
+
         internal TestAccessor GetTestAccessor() => new(this);
 
         internal readonly struct TestAccessor
@@ -4156,6 +4138,10 @@ namespace GitCommands
             {
                 _gitModule = gitModule;
             }
+
+            public DistributedSettings? EffectiveSettings => _gitModule._effectiveSettings;
+
+            public FrozenDictionary<string, Color>? RemoteColors => _gitModule._remoteColors;
 
             public GitArgumentBuilder UpdateIndexCmd(bool showErrorsWhenStagingFiles) => GitModule.UpdateIndexCmd(showErrorsWhenStagingFiles);
 

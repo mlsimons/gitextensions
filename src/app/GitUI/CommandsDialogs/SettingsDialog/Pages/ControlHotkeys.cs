@@ -1,5 +1,6 @@
-﻿using GitUI.Hotkey;
-using GitUIPluginInterfaces;
+﻿using GitExtUtils;
+using GitExtUtils.GitUI.Theming;
+using GitUI.Hotkey;
 using Microsoft;
 using ResourceManager;
 using ResourceManager.Hotkey;
@@ -53,6 +54,7 @@ namespace GitUI.CommandsDialogs.SettingsDialog.Pages
         public ControlHotkeys()
         {
             InitializeComponent();
+            txtHotkey.ForeColor.AdaptTextColor();
             InitializeComplete();
 
             cmbSettings.DisplayMember = nameof(HotkeySettings.Name);
@@ -173,6 +175,11 @@ namespace GitUI.CommandsDialogs.SettingsDialog.Pages
                 UpdateListViewItems(SelectedHotkeySettings);
                 txtHotkey.KeyData = hotkey.KeyData;
             }
+        }
+
+        private void listMappings_Resize(object sender, EventArgs e)
+        {
+            columnKey.Width = listMappings.ClientSize.Width - columnCommand.Width;
         }
 
         private void bResetToDefaults_Click(object sender, EventArgs e)
