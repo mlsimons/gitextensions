@@ -42,6 +42,7 @@ namespace GitCommands
         {
             ThreadHelper.FileAndForget(async () =>
                 {
+                    System.Diagnostics.Debug.WriteLine($"git {arguments}");
                     using IProcess process = RunDetached(CancellationToken.None, arguments, createWindow, redirectInput, redirectOutput, outputEncoding);
                     await process.WaitForExitAsync();
                 });
