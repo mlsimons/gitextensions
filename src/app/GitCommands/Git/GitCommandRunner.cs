@@ -19,7 +19,7 @@ public sealed class GitCommandRunner : IGitCommandRunner
     public IProcess RunDetached(
         CancellationToken cancellationToken,
         ArgumentString arguments = default,
-        bool createWindow = false,
+        bool createWindow = true,
         bool redirectInput = false,
         bool redirectOutput = false,
         Encoding? outputEncoding = null,
@@ -35,13 +35,14 @@ public sealed class GitCommandRunner : IGitCommandRunner
 
     public void RunDetached(
         ArgumentString arguments = default,
-        bool createWindow = false,
+        bool createWindow = true,
         bool redirectInput = false,
         bool redirectOutput = false,
         Encoding? outputEncoding = null)
     {
         ThreadHelper.FileAndForget(async () =>
             {
+                System.Diagnostics.Debug.WriteLine($"git {arguments}");
                 using IProcess process = RunDetached(CancellationToken.None, arguments, createWindow, redirectInput, redirectOutput, outputEncoding);
                 await process.WaitForExitAsync();
             });
