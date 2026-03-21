@@ -393,6 +393,10 @@ partial class FileStatusList
             case RevisionDiffControl.Command.ShowHistory: tsmiFileHistory.PerformClick(); break;
             case RevisionDiffControl.Command.Blame: tsmiBlame.PerformClick(); break;
             case RevisionDiffControl.Command.OpenWithDifftool: OpenFilesWithDiffTool(RevisionDiffKind.DiffAB); break;
+            case RevisionDiffControl.Command.OpenWithDifftoolBothToLocal:
+                OpenFilesWithDiffTool(RevisionDiffKind.DiffALocal);
+                OpenFilesWithDiffTool(RevisionDiffKind.DiffBLocal);
+                break;
             case RevisionDiffControl.Command.OpenWithDifftoolFirstToLocal: OpenFilesWithDiffTool(RevisionDiffKind.DiffALocal); break;
             case RevisionDiffControl.Command.OpenWithDifftoolSelectedToLocal: OpenFilesWithDiffTool(RevisionDiffKind.DiffBLocal); break;
             case RevisionDiffControl.Command.OpenWorkingDirectoryFile: tsmiOpenWorkingDirectoryFile.PerformClick(); break;

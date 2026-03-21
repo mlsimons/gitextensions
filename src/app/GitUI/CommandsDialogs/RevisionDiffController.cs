@@ -64,11 +64,10 @@ internal sealed class RevisionDiffController(Func<IGitModule> getModule, IFullPa
             string? selectedPath = userSelection(baseSourceDirectory);
             if (selectedPath is null)
             {
-                // User has cancelled the selection
                 return;
             }
 
-            Uri baseSourceDirectoryUri = new(baseSourceDirectory!);
+            Uri baseSourceDirectoryUri = new(baseSourceDirectory);
 
             foreach (FileStatusItem item in selectedFiles)
             {
@@ -85,9 +84,6 @@ internal sealed class RevisionDiffController(Func<IGitModule> getModule, IFullPa
                     Uri selectedItemUri = new(selectedItemSourceDirectory!);
                     targetDirectory = Path.Combine(selectedPath, baseSourceDirectoryUri.MakeRelativeUri(selectedItemUri).OriginalString);
                 }
-
-                // TODO: check target file exists.
-                // TODO: allow cancel the whole sequence
 
                 Directory.CreateDirectory(targetDirectory);
                 string targetFileName = Path.Join(targetDirectory, Path.GetFileName(selectedItemFullName)!).ToNativePath();
@@ -120,7 +116,6 @@ internal sealed class RevisionDiffController(Func<IGitModule> getModule, IFullPa
             string? selectedFileName = userSelection(fullName!);
             if (selectedFileName is null)
             {
-                // User has cancelled the selection
                 return;
             }
 
