@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using GitCommands;
 using GitExtensions.Extensibility;
 using GitExtensions.Extensibility.Git;
@@ -32,6 +32,30 @@ internal sealed class RevisionDiffController(Func<IGitModule> getModule, IFullPa
     private readonly Func<IGitModule> _getModule = getModule;
     private readonly IFullPathResolver _fullPathResolver = fullPathResolver;
 
+    private string GetCommonPath(List<FileStatusItem> selectedFiles)
+    {
+        if (selectedFiles.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        string firstItemFullName = _fullPathResolver.Resolve(selectedFiles[0].Item.Name);
+        string commonPath = Path.GetDirectoryName(firstItemFullName).EnsureTrailingPathSeparator();
+
+        foreach (FileStatusItem item in selectedFiles)
+        {
+            string selectedItemFullName = _fullPathResolver.Resolve(item.Item.Name);
+            string selectedItemSourceDirectory = Path.GetDirectoryName(selectedItemFullName).EnsureTrailingPathSeparator();
+
+            while (!selectedItemSourceDirectory.StartsWith(commonPath, StringComparison.OrdinalIgnoreCase))
+            {
+                commonPath = Path.GetDirectoryName(commonPath.TrimEnd(Path.DirectorySeparatorChar)).EnsureTrailingPathSeparator();
+            }
+        }
+
+        return commonPath;
+    }
+
     public void SaveFiles(List<FileStatusItem> files, Func<string, string?> userSelection)
     {
         ArgumentNullException.ThrowIfNull(files);
@@ -54,7 +78,9 @@ internal sealed class RevisionDiffController(Func<IGitModule> getModule, IFullPa
 
         void SaveMultipleFiles(List<FileStatusItem> selectedFiles)
         {
-            string baseSourceDirectory = _fullPathResolver.Resolve(GetLongestCommonPath(selectedFiles)).EnsureTrailingPathSeparator();
+            // Derive the folder from the first selected file.
+            string firstItemFullName = _fullPathResolver.Resolve(selectedFiles[0].Item.Name);
+            string baseSourceDirectory = Path.GetDirectoryName(firstItemFullName).EnsureTrailingPathSeparator();
 
             string selectedPath = userSelection(baseSourceDirectory);
             if (selectedPath is null)
@@ -63,49 +89,26 @@ internal sealed class RevisionDiffController(Func<IGitModule> getModule, IFullPa
                 return;
             }
 
-            Uri baseSourceDirectoryUri = new(baseSourceDirectory);
+            string commonPath = GetCommonPath(selectedFiles);
 
             foreach (FileStatusItem item in selectedFiles)
             {
                 string selectedItemFullName = _fullPathResolver.Resolve(item.Item.Name);
-                string selectedItemSourceDirectory = Path.GetDirectoryName(selectedItemFullName).EnsureTrailingPathSeparator();
-
-                string targetDirectory;
-                if (selectedItemSourceDirectory == baseSourceDirectory)
-                {
-                    targetDirectory = selectedPath;
-                }
-                else
-                {
-                    Uri selectedItemUri = new(selectedItemSourceDirectory);
-                    targetDirectory = Path.Combine(selectedPath, baseSourceDirectoryUri.MakeRelativeUri(selectedItemUri).OriginalString);
-                }
+                string relativePath = selectedItemFullName.Substring(commonPath.Length);
+                string targetFileName = Path.Combine(selectedPath, relativePath).ToNativePath();
 
                 // TODO: check target file exists.
                 // TODO: allow cancel the whole sequence
 
-                Directory.CreateDirectory(targetDirectory);
-                string targetFileName = Path.Combine(targetDirectory, Path.GetFileName(selectedItemFullName)).ToNativePath();
+                string? parentDirectory = Path.GetDirectoryName(targetFileName);
+                if (!string.IsNullOrEmpty(parentDirectory))
+                {
+                    Directory.CreateDirectory(parentDirectory);
+                }
+
                 Debug.WriteLine($"Saving {selectedItemFullName} --> {targetFileName}");
 
                 GetModule().SaveBlobAs(targetFileName, $"{item.SecondRevision.Guid}:\"{item.Item.Name}\"");
-            }
-
-            return;
-
-            static string GetLongestCommonPath(List<FileStatusItem> files)
-            {
-                string firstFile = files[0].Item.Name;
-                for (int length = files.Min(f => f.Item.Path.Length) + 1; length > 0; --length)
-                {
-                    string possibleMatch = firstFile[..length];
-                    if (files.All(f => f.Item.Name.StartsWith(possibleMatch)))
-                    {
-                        return Path.GetDirectoryName(possibleMatch);
-                    }
-                }
-
-                return string.Empty;
             }
         }
 

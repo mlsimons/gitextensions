@@ -115,6 +115,7 @@ public partial class RevisionDiffControl : GitModuleControl, IRevisionGridFileUp
         AddFileToGitIgnore = 22,
         RenameMove = 23,
         FindInCommitFilesUsingGitGrep_FileTreeTab = 24,
+        OpenWithDifftoolBothToLocal = 25,
     }
 
     public bool ExecuteCommand(Command cmd)

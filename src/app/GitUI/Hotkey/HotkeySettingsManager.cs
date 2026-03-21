@@ -361,6 +361,7 @@ internal class HotkeySettingsManager : IHotkeySettingsManager
                 Hk(RevisionDiffControl.Command.OpenAsTempFileWith, OpenAsTempFileWithHotkey),
                 Hk(RevisionDiffControl.Command.OpenInVisualStudio, Keys.Control | Keys.Shift | Keys.S),
                 Hk(RevisionDiffControl.Command.OpenWithDifftool, OpenWithDifftoolHotkey),
+                Hk(RevisionDiffControl.Command.OpenWithDifftoolBothToLocal, Keys.Control | Keys.D),
                 Hk(RevisionDiffControl.Command.OpenWithDifftoolFirstToLocal, OpenWithDifftoolFirstToLocalHotkey),
                 Hk(RevisionDiffControl.Command.OpenWithDifftoolSelectedToLocal, OpenWithDifftoolSelectedToLocalHotkey),
                 Hk(RevisionDiffControl.Command.OpenWorkingDirectoryFile, OpenFileHotkey),
