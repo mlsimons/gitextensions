@@ -52,6 +52,25 @@ public class FormPushTests
             });
     }
 
+    [Test]
+    public void Should_sync_branch_to_push_into_to_branch()
+    {
+        const string branchName = "feature/sync-button";
+
+        RunFormTest(
+            form =>
+            {
+                FormPush.TestAccessor accessor = form.GetTestAccessor();
+
+                accessor.BranchToPush.Text = branchName;
+                accessor.ToBranch.Text = "different";
+
+                accessor.SyncBranches();
+
+                accessor.ToBranch.Text.Should().Be(branchName);
+            });
+    }
+
     private void RunFormTest(Action<FormPush> testDriver)
     {
         RunFormTest(

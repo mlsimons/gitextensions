@@ -1,4 +1,4 @@
-﻿namespace GitUI.CommandsDialogs;
+namespace GitUI.CommandsDialogs;
 
 partial class FormPush
 {
@@ -29,6 +29,7 @@ partial class FormPush
         _NO_TRANSLATE_Branch = new ComboBox();
         labelTo = new Label();
         RemoteBranch = new ComboBox();
+        SyncBranches = new Button();
         ShowOptions = new LinkLabel();
         flowLayoutPanel1 = new FlowLayoutPanel();
         label2 = new Label();
@@ -180,18 +181,20 @@ partial class FormPush
         tableLayoutPanel1.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         tableLayoutPanel1.AutoSize = true;
         tableLayoutPanel1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        tableLayoutPanel1.ColumnCount = 3;
+        tableLayoutPanel1.ColumnCount = 4;
         tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle());
         tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle());
         tableLayoutPanel1.Controls.Add(_NO_TRANSLATE_Branch, 0, 0);
         tableLayoutPanel1.Controls.Add(labelTo, 1, 0);
         tableLayoutPanel1.Controls.Add(RemoteBranch, 2, 0);
+        tableLayoutPanel1.Controls.Add(SyncBranches, 3, 0);
         tableLayoutPanel1.Location = new Point(124, 12);
         tableLayoutPanel1.Name = "tableLayoutPanel1";
         tableLayoutPanel1.RowCount = 1;
         tableLayoutPanel1.RowStyles.Add(new RowStyle());
-        tableLayoutPanel1.Size = new Size(417, 22);
+        tableLayoutPanel1.Size = new Size(417, 23);
         tableLayoutPanel1.TabIndex = 1;
         // 
         // _NO_TRANSLATE_Branch
@@ -229,8 +232,22 @@ partial class FormPush
         RemoteBranch.Location = new Point(220, 0);
         RemoteBranch.Margin = new Padding(0);
         RemoteBranch.Name = "RemoteBranch";
-        RemoteBranch.Size = new Size(197, 21);
+        RemoteBranch.Size = new Size(168, 21);
         RemoteBranch.TabIndex = 2;
+        // 
+        // SyncBranches
+        // 
+        SyncBranches.AutoSize = true;
+        SyncBranches.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        SyncBranches.Location = new Point(388, 0);
+        SyncBranches.Margin = new Padding(0);
+        SyncBranches.Name = "SyncBranches";
+        SyncBranches.Size = new Size(53, 23);
+        SyncBranches.TabIndex = 3;
+        SyncBranches.Text = "S&ync";
+        toolTip1.SetToolTip(SyncBranches, "Copy branch to push into remote branch");
+        SyncBranches.UseVisualStyleBackColor = true;
+        SyncBranches.Click += SyncBranchesClick;
         // 
         // ShowOptions
         // 
@@ -637,6 +654,7 @@ partial class FormPush
     private CheckBox _createPullRequestCB;
     private Label labelTo;
     private ComboBox RemoteBranch;
+    private Button SyncBranches;
     private Label labelFrom;
     private ComboBox _NO_TRANSLATE_Branch;
     private CheckBox ReplaceTrackingReference;

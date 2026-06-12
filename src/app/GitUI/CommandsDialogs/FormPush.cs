@@ -14,6 +14,7 @@ using GitExtUtils.GitUI;
 using GitUI.HelperDialogs;
 using GitUI.Infrastructure;
 using GitUI.ScriptsEngine;
+using GitUIPluginInterfaces;
 using Microsoft;
 using ResourceManager;
 
@@ -117,7 +118,7 @@ public partial class FormPush : GitModuleForm
             RecursiveSubmodules.SelectedIndex = AppSettings.RecursiveSubmodules;
 
             _currentBranchName = Module.GetSelectedBranch();
-            branchName ??= _currentBranchName;
+            branchName ??= GetDefaultBranchFromSelectedRevision() ?? _currentBranchName;
 
             // refresh registered git remotes
             UserGitRemotes = [.. _remotesManager.LoadRemotes(false)];
@@ -143,6 +144,20 @@ public partial class FormPush : GitModuleForm
             // Handle left button click to also open the context menu
             BranchGrid.ColumnHeaderMouseClick += BranchGrid_ColumnHeaderMouseClick;
         }
+    }
+
+    private string? GetDefaultBranchFromSelectedRevision()
+    {
+        GitRevision? selectedRevision = UICommands.BrowseRepo?.GetLatestSelectedRevision();
+        if (selectedRevision is null || selectedRevision.IsArtificial)
+        {
+            return null;
+        }
+
+        // If multiple branches point to the selected commit, use the first one.
+        return selectedRevision.Refs
+            .FirstOrDefault(r => r.IsHead && !string.IsNullOrWhiteSpace(r.Name))
+            ?.Name;
     }
 
     /// <summary>
@@ -824,6 +839,16 @@ public partial class FormPush : GitModuleForm
         }
     }
 
+    private void SyncBranchesClick(object sender, EventArgs e)
+    {
+        if (_NO_TRANSLATE_Branch.Text == AllRefs)
+        {
+            return;
+        }
+
+        RemoteBranch.Text = _NO_TRANSLATE_Branch.Text;
+    }
+
     private void FormPushLoad(object sender, EventArgs e)
     {
         _NO_TRANSLATE_Remotes.Select();
@@ -1348,6 +1373,12 @@ public partial class FormPush : GitModuleForm
         public CheckBox ForcePushBranches => _form.ForcePushBranches;
 
         public CheckBox ForcePushTags => _form.ForcePushTags;
+
+        public ComboBox BranchToPush => _form._NO_TRANSLATE_Branch;
+
+        public ComboBox ToBranch => _form.RemoteBranch;
+
+        public void SyncBranches() => _form.SyncBranches.PerformClick();
 
         public ForcePushOptions GetForcePushOption() => _form.GetForcePushOption();
     }
