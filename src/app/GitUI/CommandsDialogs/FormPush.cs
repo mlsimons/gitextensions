@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using System.Text.RegularExpressions;
 using GitCommands;
 using GitCommands.Config;
@@ -14,6 +14,7 @@ using GitExtUtils.GitUI;
 using GitUI.HelperDialogs;
 using GitUI.Infrastructure;
 using GitUI.ScriptsEngine;
+using GitUIPluginInterfaces;
 using Microsoft;
 using ResourceManager;
 
@@ -117,11 +118,13 @@ public partial class FormPush : GitModuleForm
             RecursiveSubmodules.SelectedIndex = AppSettings.RecursiveSubmodules;
 
             _currentBranchName = Module.GetSelectedBranch();
+            string? branchFromSelectedRevision = GetDefaultBranchFromSelectedRevision();
 
             // refresh registered git remotes
             UserGitRemotes = _remotesManager.LoadRemotes(false).ToList();
 
-            _NO_TRANSLATE_Branch.Text = DetachedHeadParser.IsDetachedHead(_currentBranchName) ? HeadText : _currentBranchName;
+            _NO_TRANSLATE_Branch.Text = branchFromSelectedRevision
+                ?? (DetachedHeadParser.IsDetachedHead(_currentBranchName) ? HeadText : _currentBranchName);
 
             BindRemotesDropDown(null);
 
@@ -142,6 +145,20 @@ public partial class FormPush : GitModuleForm
             // Handle left button click to also open the context menu
             BranchGrid.ColumnHeaderMouseClick += BranchGrid_ColumnHeaderMouseClick;
         }
+    }
+
+    private string? GetDefaultBranchFromSelectedRevision()
+    {
+        GitRevision? selectedRevision = UICommands.BrowseRepo?.GetLatestSelectedRevision();
+        if (selectedRevision is null || selectedRevision.IsArtificial)
+        {
+            return null;
+        }
+
+        // If multiple branches point to the selected commit, use the first one.
+        return selectedRevision.Refs
+            .FirstOrDefault(r => r.IsHead && !string.IsNullOrWhiteSpace(r.Name))
+            ?.Name;
     }
 
     /// <summary>
@@ -816,6 +833,16 @@ public partial class FormPush : GitModuleForm
         }
     }
 
+    private void SyncBranchesClick(object sender, EventArgs e)
+    {
+        if (_NO_TRANSLATE_Branch.Text == AllRefs)
+        {
+            return;
+        }
+
+        RemoteBranch.Text = _NO_TRANSLATE_Branch.Text;
+    }
+
     private void FormPushLoad(object sender, EventArgs e)
     {
         _NO_TRANSLATE_Remotes.Select();
@@ -1294,6 +1321,12 @@ public partial class FormPush : GitModuleForm
         public CheckBox ForcePushBranches => _form.ForcePushBranches;
 
         public CheckBox ForcePushTags => _form.ForcePushTags;
+
+        public ComboBox BranchToPush => _form._NO_TRANSLATE_Branch;
+
+        public ComboBox ToBranch => _form.RemoteBranch;
+
+        public void SyncBranches() => _form.SyncBranches.PerformClick();
 
         public ForcePushOptions GetForcePushOption() => _form.GetForcePushOption();
     }
