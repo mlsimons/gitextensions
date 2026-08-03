@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 namespace GitExtensions.Extensibility.Git;
 
@@ -11,7 +11,7 @@ public interface IGitCommandRunner
     IProcess RunDetached(
         CancellationToken cancellationToken,
         ArgumentString arguments = default,
-        bool createWindow = true,
+        bool createWindow = false,
         bool redirectInput = false,
         bool redirectOutput = false,
         Encoding? outputEncoding = null,
@@ -23,7 +23,7 @@ public interface IGitCommandRunner
     /// </summary>
     void RunDetached(
         ArgumentString arguments = default,
-        bool createWindow = true,
+        bool createWindow = false,
         bool redirectInput = false,
         bool redirectOutput = false,
         Encoding? outputEncoding = null);

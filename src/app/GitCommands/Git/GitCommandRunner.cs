@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using GitExtensions.Extensibility;
 using GitExtensions.Extensibility.Git;
 using GitUI;
@@ -19,7 +19,7 @@ public sealed class GitCommandRunner : IGitCommandRunner
     public IProcess RunDetached(
         CancellationToken cancellationToken,
         ArgumentString arguments = default,
-        bool createWindow = true,
+        bool createWindow = false,
         bool redirectInput = false,
         bool redirectOutput = false,
         Encoding? outputEncoding = null,
@@ -30,12 +30,14 @@ public sealed class GitCommandRunner : IGitCommandRunner
             outputEncoding = _defaultEncoding();
         }
 
-        return _gitExecutable.Start(arguments, createWindow, redirectInput, redirectOutput, outputEncoding, useShellExecute: false, throwOnErrorExit, cancellationToken);
+        bool shouldCreateWindow = createWindow || IsDiffOrMergeToolCommand(arguments);
+
+        return _gitExecutable.Start(arguments, shouldCreateWindow, redirectInput, redirectOutput, outputEncoding, useShellExecute: false, throwOnErrorExit, cancellationToken);
     }
 
     public void RunDetached(
         ArgumentString arguments = default,
-        bool createWindow = true,
+        bool createWindow = false,
         bool redirectInput = false,
         bool redirectOutput = false,
         Encoding? outputEncoding = null)
@@ -46,5 +48,14 @@ public sealed class GitCommandRunner : IGitCommandRunner
                 using IProcess process = RunDetached(CancellationToken.None, arguments, createWindow, redirectInput, redirectOutput, outputEncoding);
                 await process.WaitForExitAsync();
             });
+    }
+
+    private static bool IsDiffOrMergeToolCommand(ArgumentString arguments)
+    {
+        string argumentString = arguments;
+        ReadOnlySpan<char> trimmedArguments = argumentString.AsSpan().TrimStart();
+
+        return trimmedArguments.StartsWith("difftool", StringComparison.Ordinal)
+            || trimmedArguments.StartsWith("mergetool", StringComparison.Ordinal);
     }
 }
