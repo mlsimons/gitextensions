@@ -44,10 +44,19 @@ partial class FormCherryPick
         tlPnlMain = new TableLayoutPanel();
         chooseRevPanel = new FlowLayoutPanel();
         lblAnotherRev = new Label();
+        localChangesGB = new GroupBox();
+        flpnlLocalOptions = new FlowLayoutPanel();
+        rbDontChange = new RadioButton();
+        rbMerge = new RadioButton();
+        rbStash = new RadioButton();
+        rbReset = new RadioButton();
+        chkSetLocalChangesActionAsDefault = new CheckBox();
         MainPanel.SuspendLayout();
         ControlsPanel.SuspendLayout();
         tlPnlMain.SuspendLayout();
         chooseRevPanel.SuspendLayout();
+        localChangesGB.SuspendLayout();
+        flpnlLocalOptions.SuspendLayout();
         SuspendLayout();
         // 
         // MainPanel
@@ -155,6 +164,94 @@ partial class FormCherryPick
         cbxAddReference.Text = "A&dd commit reference to commit message";
         cbxAddReference.UseVisualStyleBackColor = true;
         // 
+        // localChangesGB
+        // 
+        localChangesGB.Controls.Add(flpnlLocalOptions);
+        localChangesGB.Dock = DockStyle.Fill;
+        localChangesGB.Location = new Point(3, 351);
+        localChangesGB.Name = "localChangesGB";
+        localChangesGB.Size = new Size(584, 58);
+        localChangesGB.TabIndex = 10;
+        localChangesGB.TabStop = false;
+        localChangesGB.Text = "Local changes";
+        // 
+        // flpnlLocalOptions
+        // 
+        flpnlLocalOptions.AutoSize = true;
+        flpnlLocalOptions.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        flpnlLocalOptions.Controls.Add(rbDontChange);
+        flpnlLocalOptions.Controls.Add(rbMerge);
+        flpnlLocalOptions.Controls.Add(rbStash);
+        flpnlLocalOptions.Controls.Add(rbReset);
+        flpnlLocalOptions.Controls.Add(chkSetLocalChangesActionAsDefault);
+        flpnlLocalOptions.Dock = DockStyle.Fill;
+        flpnlLocalOptions.Location = new Point(3, 19);
+        flpnlLocalOptions.Name = "flpnlLocalOptions";
+        flpnlLocalOptions.Padding = new Padding(9, 4, 9, 4);
+        flpnlLocalOptions.Size = new Size(578, 36);
+        flpnlLocalOptions.TabIndex = 0;
+        flpnlLocalOptions.WrapContents = false;
+        // 
+        // rbDontChange
+        // 
+        rbDontChange.AutoSize = true;
+        rbDontChange.Checked = true;
+        rbDontChange.Location = new Point(11, 6);
+        rbDontChange.Margin = new Padding(2);
+        rbDontChange.Name = "rbDontChange";
+        rbDontChange.Size = new Size(96, 21);
+        rbDontChange.TabIndex = 0;
+        rbDontChange.TabStop = true;
+        rbDontChange.Text = "Do&n\'t change";
+        rbDontChange.UseVisualStyleBackColor = true;
+        // 
+        // rbMerge
+        // 
+        rbMerge.AutoSize = true;
+        rbMerge.Location = new Point(111, 6);
+        rbMerge.Margin = new Padding(2);
+        rbMerge.Name = "rbMerge";
+        rbMerge.Size = new Size(59, 21);
+        rbMerge.TabIndex = 1;
+        rbMerge.TabStop = true;
+        rbMerge.Text = "&Merge";
+        rbMerge.UseVisualStyleBackColor = true;
+        // 
+        // rbStash
+        // 
+        rbStash.AutoSize = true;
+        rbStash.Location = new Point(174, 6);
+        rbStash.Margin = new Padding(2);
+        rbStash.Name = "rbStash";
+        rbStash.Size = new Size(53, 21);
+        rbStash.TabIndex = 2;
+        rbStash.TabStop = true;
+        rbStash.Text = "S&tash";
+        rbStash.UseVisualStyleBackColor = true;
+        // 
+        // rbReset
+        // 
+        rbReset.AutoSize = true;
+        rbReset.Location = new Point(231, 6);
+        rbReset.Margin = new Padding(2);
+        rbReset.Name = "rbReset";
+        rbReset.Size = new Size(53, 21);
+        rbReset.TabIndex = 3;
+        rbReset.TabStop = true;
+        rbReset.Text = "&Reset";
+        rbReset.UseVisualStyleBackColor = true;
+        rbReset.CheckedChanged += rbReset_CheckedChanged;
+        // 
+        // chkSetLocalChangesActionAsDefault
+        // 
+        chkSetLocalChangesActionAsDefault.AutoSize = true;
+        chkSetLocalChangesActionAsDefault.Location = new Point(289, 7);
+        chkSetLocalChangesActionAsDefault.Name = "chkSetLocalChangesActionAsDefault";
+        chkSetLocalChangesActionAsDefault.Size = new Size(96, 19);
+        chkSetLocalChangesActionAsDefault.TabIndex = 4;
+        chkSetLocalChangesActionAsDefault.Text = "Set as &default";
+        chkSetLocalChangesActionAsDefault.UseVisualStyleBackColor = true;
+        // 
         // cbxAutoCommit
         // 
         cbxAutoCommit.AutoSize = true;
@@ -202,11 +299,12 @@ partial class FormCherryPick
         tlPnlMain.Controls.Add(lvParentsList, 0, 4);
         tlPnlMain.Controls.Add(cbxAutoCommit, 0, 5);
         tlPnlMain.Controls.Add(cbxAddReference, 0, 6);
+        tlPnlMain.Controls.Add(localChangesGB, 0, 7);
         tlPnlMain.Dock = DockStyle.Fill;
         tlPnlMain.Location = new Point(12, 12);
         tlPnlMain.Margin = new Padding(0);
         tlPnlMain.Name = "tlPnlMain";
-        tlPnlMain.RowCount = 7;
+        tlPnlMain.RowCount = 8;
         tlPnlMain.RowStyles.Add(new RowStyle());
         tlPnlMain.RowStyles.Add(new RowStyle());
         tlPnlMain.RowStyles.Add(new RowStyle());
@@ -214,7 +312,8 @@ partial class FormCherryPick
         tlPnlMain.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         tlPnlMain.RowStyles.Add(new RowStyle());
         tlPnlMain.RowStyles.Add(new RowStyle());
-        tlPnlMain.Size = new Size(590, 348);
+        tlPnlMain.RowStyles.Add(new RowStyle());
+        tlPnlMain.Size = new Size(590, 412);
         tlPnlMain.TabIndex = 0;
         // 
         // chooseRevPanel
@@ -269,6 +368,10 @@ partial class FormCherryPick
         tlPnlMain.PerformLayout();
         chooseRevPanel.ResumeLayout(false);
         chooseRevPanel.PerformLayout();
+        localChangesGB.ResumeLayout(false);
+        localChangesGB.PerformLayout();
+        flpnlLocalOptions.ResumeLayout(false);
+        flpnlLocalOptions.PerformLayout();
         ResumeLayout(false);
         PerformLayout();
     }
@@ -291,4 +394,11 @@ partial class FormCherryPick
     private Button btnChooseRevision;
     private TableLayoutPanel tlPnlMain;
     private FlowLayoutPanel chooseRevPanel;
+    private GroupBox localChangesGB;
+    private FlowLayoutPanel flpnlLocalOptions;
+    private RadioButton rbDontChange;
+    private RadioButton rbMerge;
+    private RadioButton rbStash;
+    private RadioButton rbReset;
+    private CheckBox chkSetLocalChangesActionAsDefault;
 }

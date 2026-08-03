@@ -9,6 +9,12 @@ namespace GitCommandsTests_Git;
 public partial class CommandsTests
 {
     [Test]
+    public void AddAllCmd()
+    {
+        Commands.AddAll().Arguments.Should().Be("add -A");
+    }
+
+    [Test]
     public void AbortMergeCmd()
     {
         Commands.AbortMerge().Arguments.Should().Be("merge --abort");

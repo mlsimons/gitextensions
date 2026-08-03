@@ -30,6 +30,7 @@ public partial class ConfirmationsSettingsPage : SettingsPageWithHeader
         // Stashes:
         chkAutoPopStashAfterPull.CheckState = ToCheckboxStateInverted(AppSettings.AutoPopStashAfterPull);
         chkAutoPopStashAfterCheckout.CheckState = ToCheckboxStateInverted(AppSettings.AutoPopStashAfterCheckoutBranch);
+        chkAutoPopStashAfterCherryPick.CheckState = ToCheckboxStateInverted(AppSettings.AutoPopStashAfterCherryPick);
         chkConfirmStashDrop.Checked = !AppSettings.DontConfirmStashDrop;
 
         // Conflict resolution:
@@ -64,6 +65,7 @@ public partial class ConfirmationsSettingsPage : SettingsPageWithHeader
         // Stashes:
         AppSettings.AutoPopStashAfterPull = ToBooleanInverted(chkAutoPopStashAfterPull.CheckState);
         AppSettings.AutoPopStashAfterCheckoutBranch = ToBooleanInverted(chkAutoPopStashAfterCheckout.CheckState);
+        AppSettings.AutoPopStashAfterCherryPick = ToBooleanInverted(chkAutoPopStashAfterCherryPick.CheckState);
         AppSettings.DontConfirmStashDrop = !chkConfirmStashDrop.Checked;
 
         // Conflict resolution:

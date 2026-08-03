@@ -1068,6 +1068,18 @@ public static partial class AppSettings
         set => SetBool("AutoPopStashAfterCheckoutBranch", value);
     }
 
+    public static bool? AutoPopStashAfterCherryPick
+    {
+        get => GetBool("AutoPopStashAfterCherryPick");
+        set => SetBool("AutoPopStashAfterCherryPick", value);
+    }
+
+    public static LocalChangesAction CherryPickAction
+    {
+        get => GetEnum("cherrypickaction", LocalChangesAction.DontChange);
+        set => SetEnum("cherrypickaction", value);
+    }
+
     public static GitPullAction? AutoPullOnPushRejectedAction
     {
         get => GetNullableEnum<GitPullAction>("AutoPullOnPushRejectedAction");

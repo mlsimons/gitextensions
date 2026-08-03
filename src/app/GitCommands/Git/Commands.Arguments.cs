@@ -92,6 +92,14 @@ public static partial class Commands
         };
     }
 
+    public static ArgumentString AddAll()
+    {
+        return new GitArgumentBuilder("add")
+        {
+            "-A"
+        };
+    }
+
     public static ArgumentString CherryPick(ObjectId commitId, bool commit, string arguments)
     {
         return new GitArgumentBuilder("cherry-pick")

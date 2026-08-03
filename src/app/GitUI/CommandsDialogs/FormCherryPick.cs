@@ -14,11 +14,16 @@ public partial class FormCherryPick : GitExtensionsDialog
     #region Translation
     private readonly TranslationString _noneParentSelectedText =
         new("None parent is selected!");
+    private readonly TranslationString _applyStashedItemsAgainCaption =
+        new("Auto stash");
+    private readonly TranslationString _applyStashedItemsAgain =
+        new("Apply stashed items to working directory again?");
     #endregion
 
     private bool _isMerge;
     private int _lblParentsControlHeight;
     private int _lvParentsListControlHeight;
+    private bool? _isDirtyDir;
 
     private const int _parentsListItemHeight = 18;
 
@@ -38,6 +43,38 @@ public partial class FormCherryPick : GitExtensionsDialog
 
         InitializeComplete();
     }
+
+    private LocalChangesAction ChangesMode
+    {
+        get
+        {
+            if (rbReset.Checked)
+            {
+                return LocalChangesAction.Reset;
+            }
+
+            if (rbMerge.Checked)
+            {
+                return LocalChangesAction.Merge;
+            }
+
+            if (rbStash.Checked)
+            {
+                return LocalChangesAction.Stash;
+            }
+
+            return LocalChangesAction.DontChange;
+        }
+        set
+        {
+            rbReset.Checked = value == LocalChangesAction.Reset;
+            rbMerge.Checked = value == LocalChangesAction.Merge;
+            rbStash.Checked = value == LocalChangesAction.Stash;
+            rbDontChange.Checked = value == LocalChangesAction.DontChange;
+        }
+    }
+
+    private bool HasUncommittedChanges => _isDirtyDir ?? true;
 
     private void Form_Load(object sender, EventArgs e)
     {
@@ -69,6 +106,18 @@ public partial class FormCherryPick : GitExtensionsDialog
     {
         cbxAutoCommit.Checked = AppSettings.CommitAutomaticallyAfterCherryPick;
         cbxAddReference.Checked = AppSettings.AddCommitReferenceToCherryPick;
+
+        if (AppSettings.CheckForUncommittedChangesInCheckoutBranch)
+        {
+            _isDirtyDir = Module.IsDirtyDir();
+        }
+        else
+        {
+            _isDirtyDir = null;
+        }
+
+        localChangesGB.Visible = HasUncommittedChanges;
+        ChangesMode = AppSettings.CherryPickAction;
     }
 
     private void SaveSettings()
@@ -172,15 +221,97 @@ public partial class FormCherryPick : GitExtensionsDialog
 
         if (canExecute && Revision is not null)
         {
-            ArgumentString command = Commands.CherryPick(Revision.ObjectId, cbxAutoCommit.Checked, args.ToString());
+            PerformCherryPick(args.ToString());
+        }
+    }
 
-            // Don't verify whether the command is successful.
-            // If it fails, likely there is a conflict that needs to be resolved.
-            FormProcess.ShowDialog(this, UICommands, arguments: command, Module.WorkingDir, input: null, useDialogSettings: true);
+    private void PerformCherryPick(string additionalArguments)
+    {
+        if (Revision is null)
+        {
+            return;
+        }
 
-            MergeConflictHandler.HandleMergeConflicts(UICommands, this, cbxAutoCommit.Checked);
-            DialogResult = DialogResult.OK;
-            Close();
+        LocalChangesAction localChanges = ChangesMode;
+        if (localChanges != LocalChangesAction.Reset && chkSetLocalChangesActionAsDefault.Checked)
+        {
+            AppSettings.CherryPickAction = localChanges;
+        }
+
+        if (!HasUncommittedChanges)
+        {
+            localChanges = LocalChangesAction.DontChange;
+        }
+
+        bool stash = false;
+        if (CherryPickLocalChangesHelper.ShouldStashBeforeCherryPick(localChanges, HasUncommittedChanges))
+        {
+            if (_isDirtyDir is null)
+            {
+                _isDirtyDir = Module.IsDirtyDir();
+            }
+
+            stash = _isDirtyDir == true;
+            if (stash)
+            {
+                UICommands.StashSave(this, AppSettings.IncludeUntrackedFilesInAutoStash);
+            }
+        }
+
+        foreach (ArgumentString prepareCommand in CherryPickLocalChangesHelper.GetPrepareWorkingTreeCommands(localChanges))
+        {
+            if (!FormProcess.ShowDialog(this, UICommands, arguments: prepareCommand, Module.WorkingDir, input: null, useDialogSettings: true))
+            {
+                return;
+            }
+        }
+
+        ArgumentString command = Commands.CherryPick(Revision.ObjectId, cbxAutoCommit.Checked, additionalArguments);
+
+        // Don't verify whether the command is successful.
+        // If it fails, likely there is a conflict that needs to be resolved.
+        bool success = FormProcess.ShowDialog(this, UICommands, arguments: command, Module.WorkingDir, input: null, useDialogSettings: true);
+
+        MergeConflictHandler.HandleMergeConflicts(UICommands, this, cbxAutoCommit.Checked);
+
+        if (stash && success && !Module.InTheMiddleOfConflictedMerge(throwOnErrorExit: false))
+        {
+            PopStash();
+        }
+
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    private void PopStash()
+    {
+        bool? messageBoxResult = AppSettings.AutoPopStashAfterCherryPick;
+        if (messageBoxResult is null)
+        {
+            TaskDialogPage page = new()
+            {
+                Text = _applyStashedItemsAgain.Text,
+                Caption = _applyStashedItemsAgainCaption.Text,
+                Icon = TaskDialogIcon.Information,
+                Buttons = { TaskDialogButton.Yes, TaskDialogButton.No },
+                Verification = new TaskDialogVerificationCheckBox
+                {
+                    Text = TranslatedStrings.DontShowAgain
+                },
+                SizeToContent = true
+            };
+
+            messageBoxResult = TaskDialog.ShowDialog(Handle, page) == TaskDialogButton.Yes;
+
+            if (page.Verification.Checked)
+            {
+                AppSettings.AutoPopStashAfterCherryPick = messageBoxResult;
+            }
+        }
+
+        if (messageBoxResult ?? false)
+        {
+            UICommands.StashPop(this);
         }
     }
 
@@ -188,6 +319,8 @@ public partial class FormCherryPick : GitExtensionsDialog
     {
         cbxAutoCommit.Checked = source.cbxAutoCommit.Checked;
         cbxAddReference.Checked = source.cbxAddReference.Checked;
+        ChangesMode = source.ChangesMode;
+        chkSetLocalChangesActionAsDefault.Checked = source.chkSetLocalChangesActionAsDefault.Checked;
     }
 
     private void btnChooseRevision_Click(object sender, EventArgs e)
@@ -206,5 +339,14 @@ public partial class FormCherryPick : GitExtensionsDialog
     private void lvParentsList_Resize(object sender, EventArgs e)
     {
         lvParentsList.Columns[1].Width = lvParentsList.ClientSize.Width - lvParentsList.Columns[0].Width - lvParentsList.Columns[2].Width - lvParentsList.Columns[3].Width;
+    }
+
+    private void rbReset_CheckedChanged(object sender, EventArgs e)
+    {
+        chkSetLocalChangesActionAsDefault.Enabled = !rbReset.Checked;
+        if (rbReset.Checked)
+        {
+            chkSetLocalChangesActionAsDefault.Checked = false;
+        }
     }
 }

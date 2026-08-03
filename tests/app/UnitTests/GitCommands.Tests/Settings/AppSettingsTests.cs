@@ -280,6 +280,7 @@ internal sealed class AppSettingsTests
             yield return (properties[nameof(AppSettings.AutoStash)], false, false, false);
             yield return (properties[nameof(AppSettings.RebaseAutoStash)], false, false, false);
             yield return (properties[nameof(AppSettings.CheckoutBranchAction)], LocalChangesAction.DontChange, false, false);
+            yield return (properties[nameof(AppSettings.CherryPickAction)], LocalChangesAction.DontChange, false, false);
             yield return (properties[nameof(AppSettings.CheckoutOtherBranchAfterReset)], true, isNotNullable, isISetting);
             yield return (properties[nameof(AppSettings.UseDefaultCheckoutBranchAction)], false, false, false);
             yield return (properties[nameof(AppSettings.DontShowHelpImages)], false, false, false);
@@ -289,6 +290,7 @@ internal sealed class AppSettingsTests
             yield return (properties[nameof(AppSettings.ConfirmBranchCheckout)], false, false, false);
             yield return (properties[nameof(AppSettings.AutoPopStashAfterPull)], null, true, false);
             yield return (properties[nameof(AppSettings.AutoPopStashAfterCheckoutBranch)], null, true, false);
+            yield return (properties[nameof(AppSettings.AutoPopStashAfterCherryPick)], null, true, false);
             yield return (properties[nameof(AppSettings.AutoPullOnPushRejectedAction)], null, true, false);
             yield return (properties[nameof(AppSettings.DontConfirmPushNewBranch)], false, false, false);
             yield return (properties[nameof(AppSettings.DontConfirmAddTrackingRef)], false, false, false);

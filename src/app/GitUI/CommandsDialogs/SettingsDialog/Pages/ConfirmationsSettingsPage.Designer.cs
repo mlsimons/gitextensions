@@ -46,6 +46,7 @@ partial class ConfirmationsSettingsPage
         chkBranchDeleteUnmerged = new CheckBox();
         chkAddTrackingRef = new CheckBox();
         chkAutoPopStashAfterCheckout = new CheckBox();
+        chkAutoPopStashAfterCherryPick = new CheckBox();
         chkAutoPopStashAfterPull = new CheckBox();
         chkConfirmStashDrop = new CheckBox();
         chkResolveConflicts = new CheckBox();
@@ -166,21 +167,22 @@ partial class ConfirmationsSettingsPage
         tlpnlConfirmations.Controls.Add(chkAddTrackingRef, 0, 9);
         tlpnlConfirmations.Controls.Add(lblGroupStashes, 0, 13);
         tlpnlConfirmations.Controls.Add(chkAutoPopStashAfterCheckout, 0, 14);
-        tlpnlConfirmations.Controls.Add(chkAutoPopStashAfterPull, 0, 15);
-        tlpnlConfirmations.Controls.Add(chkConfirmStashDrop, 0, 16);
-        tlpnlConfirmations.Controls.Add(lblGroupConflictResolution, 0, 18);
-        tlpnlConfirmations.Controls.Add(chkResolveConflicts, 0, 19);
-        tlpnlConfirmations.Controls.Add(chkCommitAfterConflictsResolved, 0, 20);
-        tlpnlConfirmations.Controls.Add(chkSecondAbortConfirmation, 0, 21);
-        tlpnlConfirmations.Controls.Add(lblGroupSubmodules, 0, 23);
-        tlpnlConfirmations.Controls.Add(chkUpdateModules, 0, 24);
-        tlpnlConfirmations.Controls.Add(lblGroupWorktrees, 0, 26);
-        tlpnlConfirmations.Controls.Add(chkSwitchWorktree, 0, 27);
+        tlpnlConfirmations.Controls.Add(chkAutoPopStashAfterCherryPick, 0, 15);
+        tlpnlConfirmations.Controls.Add(chkAutoPopStashAfterPull, 0, 16);
+        tlpnlConfirmations.Controls.Add(chkConfirmStashDrop, 0, 17);
+        tlpnlConfirmations.Controls.Add(lblGroupConflictResolution, 0, 19);
+        tlpnlConfirmations.Controls.Add(chkResolveConflicts, 0, 20);
+        tlpnlConfirmations.Controls.Add(chkCommitAfterConflictsResolved, 0, 21);
+        tlpnlConfirmations.Controls.Add(chkSecondAbortConfirmation, 0, 22);
+        tlpnlConfirmations.Controls.Add(lblGroupSubmodules, 0, 24);
+        tlpnlConfirmations.Controls.Add(chkUpdateModules, 0, 25);
+        tlpnlConfirmations.Controls.Add(lblGroupWorktrees, 0, 27);
+        tlpnlConfirmations.Controls.Add(chkSwitchWorktree, 0, 28);
         tlpnlConfirmations.Controls.Add(chkBranchCheckoutConfirmation, 0, 11);
         tlpnlConfirmations.Dock = DockStyle.Fill;
         tlpnlConfirmations.Location = new Point(8, 24);
         tlpnlConfirmations.Name = "tlpnlConfirmations";
-        tlpnlConfirmations.RowCount = 28;
+        tlpnlConfirmations.RowCount = 29;
         tlpnlConfirmations.RowStyles.Add(new RowStyle());
         tlpnlConfirmations.RowStyles.Add(new RowStyle());
         tlpnlConfirmations.RowStyles.Add(new RowStyle());
@@ -207,6 +209,7 @@ partial class ConfirmationsSettingsPage
         tlpnlConfirmations.RowStyles.Add(new RowStyle());
         tlpnlConfirmations.RowStyles.Add(new RowStyle());
         tlpnlConfirmations.RowStyles.Add(new RowStyle(SizeType.Absolute, 12F));
+        tlpnlConfirmations.RowStyles.Add(new RowStyle());
         tlpnlConfirmations.RowStyles.Add(new RowStyle());
         tlpnlConfirmations.RowStyles.Add(new RowStyle());
         tlpnlConfirmations.Size = new Size(1391, 575);
@@ -305,13 +308,24 @@ partial class ConfirmationsSettingsPage
         chkAutoPopStashAfterCheckout.ThreeState = true;
         chkAutoPopStashAfterCheckout.UseVisualStyleBackColor = true;
         // 
+        // chkAutoPopStashAfterCherryPick
+        // 
+        chkAutoPopStashAfterCherryPick.AutoSize = true;
+        chkAutoPopStashAfterCherryPick.Location = new Point(3, 322);
+        chkAutoPopStashAfterCherryPick.Name = "chkAutoPopStashAfterCherryPick";
+        chkAutoPopStashAfterCherryPick.Size = new Size(520, 19);
+        chkAutoPopStashAfterCherryPick.TabIndex = 11;
+        chkAutoPopStashAfterCherryPick.Text = "Apply stashed changes after successful cherry-pick (else stash will be popped automatically)";
+        chkAutoPopStashAfterCherryPick.ThreeState = true;
+        chkAutoPopStashAfterCherryPick.UseVisualStyleBackColor = true;
+        // 
         // chkAutoPopStashAfterPull
         // 
         chkAutoPopStashAfterPull.AutoSize = true;
-        chkAutoPopStashAfterPull.Location = new Point(3, 322);
+        chkAutoPopStashAfterPull.Location = new Point(3, 347);
         chkAutoPopStashAfterPull.Name = "chkAutoPopStashAfterPull";
         chkAutoPopStashAfterPull.Size = new Size(471, 19);
-        chkAutoPopStashAfterPull.TabIndex = 11;
+        chkAutoPopStashAfterPull.TabIndex = 12;
         chkAutoPopStashAfterPull.Text = "Apply stashed changes after successful pull (else stash will be popped automatically)";
         chkAutoPopStashAfterPull.ThreeState = true;
         chkAutoPopStashAfterPull.UseVisualStyleBackColor = true;
@@ -319,10 +333,10 @@ partial class ConfirmationsSettingsPage
         // chkConfirmStashDrop
         // 
         chkConfirmStashDrop.AutoSize = true;
-        chkConfirmStashDrop.Location = new Point(3, 347);
+        chkConfirmStashDrop.Location = new Point(3, 372);
         chkConfirmStashDrop.Name = "chkConfirmStashDrop";
         chkConfirmStashDrop.Size = new Size(82, 19);
-        chkConfirmStashDrop.TabIndex = 12;
+        chkConfirmStashDrop.TabIndex = 13;
         chkConfirmStashDrop.Text = "Drop stash";
         chkConfirmStashDrop.UseVisualStyleBackColor = true;
         // 
@@ -418,6 +432,7 @@ partial class ConfirmationsSettingsPage
     private CheckBox chkPushNewBranch;
     private CheckBox chkAddTrackingRef;
     private CheckBox chkAutoPopStashAfterCheckout;
+    private CheckBox chkAutoPopStashAfterCherryPick;
     private CheckBox chkConfirmStashDrop;
     private CheckBox chkUpdateModules;
     private CheckBox chkCommitIfNoBranch;
